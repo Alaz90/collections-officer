@@ -118,7 +118,12 @@ export const Payment = z.object({
 });
 export type Payment = z.infer<typeof Payment>;
 
-export const PlanStatus = z.enum(['pending_approval', 'active', 'kept', 'broken', 'rejected']);
+/**
+ * offered: sent to the borrower, waiting for their yes.
+ * pending_approval: outside the playbook, waiting for a manager.
+ * active: agreed and applied to the loan schedule.
+ */
+export const PlanStatus = z.enum(['offered', 'pending_approval', 'active', 'kept', 'broken', 'rejected', 'expired']);
 export const Plan = z.object({
   id: z.string(),
   lenderId: z.string(),
