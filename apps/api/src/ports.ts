@@ -43,7 +43,7 @@ export interface Store {
 
 /** What the writer knows when drafting a message. */
 export interface MessageBrief {
-  action: 'remind' | 'early_checkin' | 'offer_schedule_change' | 'negotiate' | 'plan_confirmation' | 'counter_offer' | 'thanks' | 'receipt_problem' | 'handover_notice';
+  action: 'remind' | 'early_checkin' | 'income_checkin' | 'offer_schedule_change' | 'negotiate' | 'plan_confirmation' | 'counter_offer' | 'thanks' | 'receipt_problem' | 'handover_notice';
   borrowerName: string;
   language: 'en' | 'am';
   lenderName: string;

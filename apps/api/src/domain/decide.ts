@@ -20,6 +20,8 @@ export interface DecisionInput {
   rainfallRatio: number | null;
   /** Whether the agent already contacted this borrower about this instalment. */
   contactedForCurrentInstalment: boolean;
+  /** Days since the last message to this borrower, or null if never. */
+  daysSinceLastContact: number | null;
   today: string;
 }
 
@@ -36,7 +38,13 @@ export function decide(input: DecisionInput): Decision {
   const out = (action: ActionKind, reason: string): Decision => ({ action, reason, expectedAtRiskCents: atRisk });
 
   if (loan.status === 'closed' || loan.status === 'defaulted') return out('wait', 'loan is closed');
-  if (loan.status === 'handed_over') return out('wait', 'with the officer');
+  if (loan.status === 'handed_over') {
+    if (loan.hold && loan.hold !== 'restructuring') return out('wait', `with the officer (${loan.hold.replace('_', ' ')})`);
+    if (borrower.optedOut) return out('wait', 'with the officer (opted out)');
+    // Waiting for an officer call is no reason to go silent.
+    if (input.daysSinceLastContact === null || input.daysSinceLastContact >= 7) return out('remind', 'weekly reminder while an officer call is pending');
+    return out('wait', 'officer call pending');
+  }
 
   const next = nextUnpaid(loan);
   if (!next || remaining(next) === 0) return out('wait', 'nothing due');
@@ -52,14 +60,18 @@ export function decide(input: DecisionInput): Decision {
   if (dpd > 0) {
     const exhausted = input.brokenPlans >= 2 || loan.rescheduleCount >= MAX_RESCHEDULES;
     if (exhausted) return out('hand_over', 'plans have not held; another one would only delay the problem');
-    if (input.unansweredMessages >= 3) return out('hand_over', 'no reply to three messages');
-    if (dpd > 30) return out('hand_over', `${dpd} days past due`);
+    // Silence alone is not a reason to hand over early: forgetful borrowers often pay without replying.
+    if (input.unansweredMessages >= 4 && dpd > 14) return out('hand_over', `no reply to ${input.unansweredMessages} messages`);
+    if (dpd > 45) return out('hand_over', `${dpd} days past due`);
+    // Space follow-ups: no more than one every other day while waiting for a reply.
+    if (input.daysSinceLastContact !== null && input.daysSinceLastContact < 2) return out('wait', 'contacted recently');
     if (input.activePlan) return out('remind', 'plan payment is late');
     return out('negotiate', `${dpd} days past due`);
   }
 
-  // Not late yet: prevention.
-  if (input.contactedForCurrentInstalment) return out('wait', 'already contacted about this payment');
+  // Not late yet: prevention. A reminder on the due date itself is still sent.
+  if (input.contactedForCurrentInstalment && daysUntilDue !== 0) return out('wait', 'already contacted about this payment');
+  if (daysUntilDue === 0 && input.daysSinceLastContact !== 0) return out('remind', 'due today');
 
   const dry = input.rainfallRatio !== null && input.rainfallRatio < 0.7;
   if (borrower.sector === 'farming' && dry && risk.level !== 'low' && daysUntilDue <= 14 && !input.activePlan) {

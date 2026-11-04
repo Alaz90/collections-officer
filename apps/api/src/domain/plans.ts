@@ -19,9 +19,25 @@ export function applyPlanToLoan(loan: Loan, plan: Pick<Plan, 'instalments' | 'ki
   const shrunk = loan.schedule
     .filter((i) => covered.has(i.dueDate) && remaining(i) > 0 && i.paidCents > 0)
     .map((i) => ({ ...i, amountCents: i.paidCents }));
-  const added = plan.instalments.map((p) => ({ dueDate: p.dueDate, amountCents: p.amountCents, paidCents: 0 }));
+  // The plan moves money in time; it never changes what is owed. If payments
+  // arrived between the offer and the yes, trim the plan from the end.
+  const owed = loan.schedule.filter((i) => covered.has(i.dueDate)).reduce((s, i) => s + remaining(i), 0);
+  const added = fitToTotal(plan.instalments, owed).map((p) => ({ dueDate: p.dueDate, amountCents: p.amountCents, paidCents: 0 }));
   const schedule = mergeSameDay([...kept, ...shrunk, ...added].sort((a, b) => a.dueDate.localeCompare(b.dueDate)));
   return { ...loan, schedule, status: 'in_plan', rescheduleCount: loan.rescheduleCount + 1 };
+}
+
+/** Adjusts instalments so they sum to `total`, trimming or extending the last ones. */
+export function fitToTotal<T extends { amountCents: number }>(instalments: T[], total: number): T[] {
+  const out = instalments.map((i) => ({ ...i }));
+  let diff = total - out.reduce((s, i) => s + i.amountCents, 0);
+  if (diff > 0 && out.length) out[out.length - 1]!.amountCents += diff;
+  for (let k = out.length - 1; k >= 0 && diff < 0; k--) {
+    const take = Math.min(out[k]!.amountCents, -diff);
+    out[k]!.amountCents -= take;
+    diff += take;
+  }
+  return out.filter((i) => i.amountCents > 0);
 }
 
 function mergeSameDay(schedule: Loan['schedule']): Loan['schedule'] {

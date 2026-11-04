@@ -237,6 +237,7 @@ describe('next best action', () => {
     unansweredMessages: 0,
     rainfallRatio: null,
     contactedForCurrentInstalment: false,
+    daysSinceLastContact: null,
     today: TODAY,
   };
   const notLate = loan({ schedule: [{ dueDate: '2026-11-20', amountCents: 200_000, paidCents: 0 }] });
@@ -260,5 +261,17 @@ describe('next best action', () => {
     const risk = { missProbability: 0.7, level: 'high' as const, reasons: [] };
     expect(decide({ ...base, loan: loan(), risk }).action).toBe('negotiate');
     expect(decide({ ...base, loan: loan(), risk, brokenPlans: 2 }).action).toBe('hand_over');
+  });
+});
+
+describe('plans never change what is owed', () => {
+  it('keeps the loan total when a payment arrives between offer and acceptance', async () => {
+    const { applyPlanToLoan, fitToTotal } = await import('../src/domain/plans.js');
+    const l = applyPayment(loan(), 200_000 + 50_000); // second instalment now 50k paid
+    const plan = { kind: 'payment_plan' as const, instalments: [{ dueDate: TODAY, amountCents: 60_000 }, { dueDate: '2026-11-17', amountCents: 140_000 }] };
+    const after = applyPlanToLoan(l, plan, TODAY);
+    const total = (x: typeof l) => x.schedule.reduce((s, i) => s + i.amountCents, 0);
+    expect(total(after)).toBe(total(l));
+    expect(fitToTotal([{ amountCents: 60 }, { amountCents: 140 }], 150).map((i) => i.amountCents)).toEqual([60, 90]);
   });
 });

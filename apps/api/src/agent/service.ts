@@ -108,7 +108,9 @@ export class CollectionsAgent {
     const contactedForCurrentInstalment =
       !!lastOut && !!next && daysBetween(lastOut.at.slice(0, 10), next.dueDate) <= 14 && lastOut.at.slice(0, 10) <= today;
     const sentToday = mine.filter((m) => m.direction === 'out' && m.status === 'sent' && m.at.startsWith(today)).length;
+    const lastSent = [...mine].reverse().find((m) => m.direction === 'out' && m.status === 'sent');
     return {
+      daysSinceLastContact: lastSent ? daysBetween(lastSent.at.slice(0, 10), today) : null,
       history: repaymentHistory(loan, payments, today),
       plans: loanPlans,
       brokenPlans: loanPlans.filter((p) => p.status === 'broken').length,
@@ -169,6 +171,7 @@ export class CollectionsAgent {
         unansweredMessages: a.context.unanswered,
         rainfallRatio: a.region && borrower.sector === 'farming' ? a.region.ratio : null,
         contactedForCurrentInstalment: a.context.contactedForCurrentInstalment,
+        daysSinceLastContact: a.context.daysSinceLastContact,
         today,
       });
       trace.decision(`${decision.action}: ${decision.reason}`, decision);
@@ -194,14 +197,17 @@ export class CollectionsAgent {
     switch (decision.action) {
       case 'wait':
         return 'no action';
-      case 'hand_over':
-        await this.deps.store.loans.put({ ...loan, status: 'handed_over' });
+      case 'hand_over': {
+        const hold = decision.reason.startsWith('plans have not held') ? 'restructuring' : (loan.hold ?? null);
+        await this.deps.store.loans.put({ ...loan, status: 'handed_over', hold });
         trace.tool('hand_over', { reason: decision.reason });
         return `handed to officer: ${decision.reason}`;
+      }
       case 'remind':
       case 'early_checkin':
       case 'negotiate': {
-        const amount = decision.action === 'negotiate' ? overdueCents(loan, today) : next ? remaining(next) : 0;
+        const overdue = overdueCents(loan, today);
+        const amount = decision.action === 'negotiate' || overdue > 0 ? overdue : next ? remaining(next) : 0;
         const link = decision.action === 'early_checkin' ? undefined : await this.paymentLink(loan, borrower, amount, trace);
         return this.sendMessage(lender, borrower, {
           action: decision.action,
@@ -212,7 +218,16 @@ export class CollectionsAgent {
         }, ctx.sentToday, trace);
       }
       case 'offer_schedule_change': {
-        const instalments = earlyScheduleChange({ loan, playbook: lender.playbook, incomeDate: null, today });
+        // Without a known income date, ask first; the reply becomes the plan.
+        if (!borrower.expectedIncomeDate || borrower.expectedIncomeDate <= today) {
+          return this.sendMessage(lender, borrower, {
+            action: 'income_checkin',
+            amountDue: formatBirr(next ? remaining(next) : 0),
+            dueDate: next?.dueDate ?? today,
+            reason: decision.reason,
+          }, ctx.sentToday, trace);
+        }
+        const instalments = earlyScheduleChange({ loan, playbook: lender.playbook, incomeDate: borrower.expectedIncomeDate, today });
         const plan = await this.proposePlan(lender, loan, 'schedule_change', instalments, ctx, trace);
         if (!plan) return 'schedule change not possible; handed to officer';
         return this.sendMessage(lender, borrower, {
@@ -262,7 +277,7 @@ export class CollectionsAgent {
     trace.policy(`realism ${realism.ok ? 'passed' : 'failed'} (${realism.score})`, realism);
 
     if (policy.verdict === 'deny' || !realism.ok) {
-      await this.deps.store.loans.put({ ...loan, status: 'handed_over' });
+      await this.deps.store.loans.put({ ...loan, status: 'handed_over', hold: !realism.ok ? 'restructuring' : null });
       trace.tool('hand_over', { reason: !realism.ok ? 'restructuring risk' : 'plan not allowed' });
       return null;
     }
@@ -356,18 +371,25 @@ export class CollectionsAgent {
     const reading = await this.deps.ai.readReply(text, { today, amountDue: formatBirr(due.cents), caseSummary: borrower.caseSummary });
     trace.tool('read_reply', reading);
     const summary = `${borrower.caseSummary}\n${today}: ${reading.summary}`.trim().split('\n').slice(-8).join('\n');
-    await this.deps.store.borrowers.put({ ...borrower, caseSummary: summary, optedOut: reading.intent === 'stop' || borrower.optedOut });
-    const fresh = { ...borrower, caseSummary: summary };
+    // Remember when the borrower expects income, for future schedule changes.
+    const lastDate = reading.proposedInstalments.map((p) => p.dueDate).sort().at(-1);
+    const fresh: Borrower = {
+      ...borrower,
+      caseSummary: summary,
+      optedOut: reading.intent === 'stop' || borrower.optedOut,
+      expectedIncomeDate: lastDate && lastDate > today ? lastDate : borrower.expectedIncomeDate,
+    };
+    await this.deps.store.borrowers.put(fresh);
 
     let outcome: string;
     switch (reading.intent) {
       case 'stop':
         outcome = 'borrower opted out; officer informed';
-        await this.deps.store.loans.put({ ...loan, status: 'handed_over' });
+        await this.deps.store.loans.put({ ...loan, status: 'handed_over', hold: 'opt_out' });
         break;
       case 'dispute':
       case 'hardship':
-        await this.deps.store.loans.put({ ...loan, status: 'handed_over' });
+        await this.deps.store.loans.put({ ...loan, status: 'handed_over', hold: reading.intent });
         trace.tool('hand_over', { reason: reading.intent });
         outcome = await this.sendMessage(lender, fresh, { action: 'handover_notice', amountDue: formatBirr(due.cents), dueDate: due.dueDate, reason: reading.intent }, 0, trace);
         break;
@@ -392,7 +414,8 @@ export class CollectionsAgent {
           outcome = 'nothing to plan';
           break;
         }
-        const plan = await this.proposePlan(lender, loan, 'payment_plan', built.instalments, ctx, trace);
+        const kind = overdueCents(loan, today) > 0 ? 'payment_plan' : 'schedule_change';
+        const plan = await this.proposePlan(lender, loan, kind, built.instalments, ctx, trace);
         if (!plan) {
           outcome = 'plan refused by policy or realism check; handed to officer';
           await this.sendMessage(lender, fresh, { action: 'handover_notice', amountDue: formatBirr(due.cents), dueDate: due.dueDate, reason: 'plan not possible' }, 0, trace);
@@ -533,6 +556,31 @@ export class CollectionsAgent {
       problems.push('amount is more than the loan balance');
     }
     return problems;
+  }
+
+  /**
+   * The officer logs a call. Unless they keep the case (hardship, dispute,
+   * legal), it returns to the agent's routine follow-up.
+   */
+  async logOfficerCall(lenderId: string, loanId: string, note: string, keepWithOfficer = false) {
+    const loan = await this.deps.store.loans.get(loanId);
+    if (!loan) throw new Error('unknown loan');
+    const borrower = await this.deps.store.borrowers.get(loan.borrowerId);
+    if (borrower) {
+      const summary = `${borrower.caseSummary}\n${this.today()}: officer call: ${note}`.trim().split('\n').slice(-8).join('\n');
+      await this.deps.store.borrowers.put({ ...borrower, caseSummary: summary });
+    }
+    if (!keepWithOfficer && loan.status === 'handed_over' && !borrower?.optedOut) {
+      const late = daysPastDue(loan, this.today()) > 0;
+      await this.deps.store.loans.put({ ...loan, status: late ? 'late' : 'current', hold: null });
+    }
+    await this.record({
+      lenderId,
+      borrowerId: loan.borrowerId,
+      trigger: 'manager_request',
+      steps: [{ kind: 'observe', detail: `officer call logged: ${note}` }],
+      outcome: keepWithOfficer ? 'kept with officer' : 'returned to agent',
+    });
   }
 
   // -------------------------------------------------------------------------

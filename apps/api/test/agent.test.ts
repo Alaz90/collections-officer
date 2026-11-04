@@ -50,16 +50,22 @@ describe('collections agent', () => {
     const { cases } = await s.agent.dailyCycle('l1');
     expect(cases[0]!.decision.action).toBe('offer_schedule_change');
     expect(cases[0]!.risk.reasons.join(' ')).toMatch(/rainfall at 40%/);
-    expect(s.channel.sent[0]!.text).toMatch(/dry season/);
-    const plans = await s.deps.store.plans.list('l1');
-    expect(plans[0]!.status).toBe('offered');
+    // No income date known yet, so the agent asks first.
+    expect(s.channel.sent[0]!.text).toMatch(/When do you expect your harvest income/);
 
-    // Borrower says yes: plan becomes active and the schedule changes.
-    await s.agent.handleReply('l1', 'b1', 'Yes, that works for me');
-    expect((await s.deps.store.plans.list('l1'))[0]!.status).toBe('active');
+    // The farmer answers with an amount now and the harvest date: the plan follows it.
+    await s.agent.handleReply('l1', 'b1', 'I can pay 1000 now and the rest on the 30th');
+    const [plan] = await s.deps.store.plans.list('l1');
+    expect(plan!.kind).toBe('schedule_change');
+    expect(plan!.status).toBe('active');
+    expect(plan!.instalments).toEqual([
+      { dueDate: '2026-11-10', amountCents: 100_000 },
+      { dueDate: '2026-11-30', amountCents: 100_000 },
+    ]);
     const updated = await s.deps.store.loans.get('loan1');
     expect(updated!.status).toBe('in_plan');
-    expect(updated!.schedule.length).toBe(3);
+    expect(updated!.schedule.map((i) => i.dueDate)).toEqual(['2026-10-20', '2026-11-10', '2026-11-30']);
+    expect((await s.deps.store.borrowers.get('b1'))!.expectedIncomeDate).toBe('2026-11-30');
     expect(s.channel.sent.at(-1)!.text).toMatch(/plan is confirmed/);
   });
 

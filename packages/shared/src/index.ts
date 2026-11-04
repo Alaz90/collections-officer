@@ -73,6 +73,8 @@ export const Borrower = z.object({
   sector: Sector,
   incomePattern: IncomePattern,
   optedOut: z.boolean(),
+  /** When the borrower expects their next income (harvest, payday), if known. */
+  expectedIncomeDate: IsoDate.optional(),
   /** Running summary the agent keeps so it never repeats itself. */
   caseSummary: z.string(),
 });
@@ -97,6 +99,11 @@ export const Loan = z.object({
   status: LoanStatus,
   /** How many times the schedule has been changed; feeds the realism check. */
   rescheduleCount: z.number().int().nonnegative(),
+  /**
+   * Why automated contact is paused while the officer has the case. Without a
+   * hold, a handed-over loan still gets a gentle weekly reminder.
+   */
+  hold: z.enum(['hardship', 'dispute', 'opt_out', 'restructuring']).nullable().optional(),
   createdAt: IsoDate,
 });
 export type Loan = z.infer<typeof Loan>;

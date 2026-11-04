@@ -16,6 +16,8 @@ export function templateMessage(b: MessageBrief): string {
       return `Hi ${b.borrowerName}, a friendly reminder from ${b.lenderName} that ${b.amountDue} is due on ${b.dueDate}.${link}`;
     case 'early_checkin':
       return `Hi ${b.borrowerName}, this is ${b.lenderName}. Your payment of ${b.amountDue} is due on ${b.dueDate}. Is that date still fine for you? If not, reply and we can find a date that works.`;
+    case 'income_checkin':
+      return `Hi ${b.borrowerName}, this is ${b.lenderName}. We know it has been a dry season in your area. Your payment of ${b.amountDue} is due on ${b.dueDate}. When do you expect your harvest income? If it helps, you can pay part now and the rest after harvest: just reply with what you can pay now and the date.`;
     case 'offer_schedule_change':
       return `Hi ${b.borrowerName}, we know it has been a dry season in your area. Your payment of ${b.amountDue} is due on ${b.dueDate}. If it helps, you can pay part now and the rest later: ${plan}. Reply YES to agree, or tell us what works for you.`;
     case 'negotiate':
