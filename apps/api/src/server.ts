@@ -51,7 +51,9 @@ export function createServer(config: Config, built = buildDeps(config)) {
   const lenderId = config.LENDER_ID;
   const today = () => toIsoDate(deps.clock.now());
   const gemini = config.GEMINI_API_KEY ? { apiKey: config.GEMINI_API_KEY, model: config.GEMINI_MODEL } : undefined;
-  const managers = new Set(config.MANAGER_EMAILS.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean));
+  const emails = (s: string) => new Set(s.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean));
+  const managers = emails(config.MANAGER_EMAILS);
+  const officers = emails(config.OFFICER_EMAILS);
 
   const app = express();
   app.disable('x-powered-by');
@@ -77,8 +79,12 @@ export function createServer(config: Config, built = buildDeps(config)) {
         const token = req.header('authorization')?.replace(/^Bearer /, '');
         if (!token || !fbApp) return res.status(401).json({ error: 'sign in required' });
         const decoded = await getAuth(fbApp).verifyIdToken(token);
+        const email = decoded.email?.toLowerCase();
         req.userEmail = decoded.email;
-        req.role = decoded.email && managers.has(decoded.email.toLowerCase()) ? 'manager' : 'officer';
+        // Only listed staff get in, even if someone manages to create an account.
+        if (email && managers.has(email)) req.role = 'manager';
+        else if (email && officers.has(email)) req.role = 'officer';
+        else return res.status(403).json({ error: 'this account is not on the staff list' });
       }
       if (need === 'manager' && req.role !== 'manager') return res.status(403).json({ error: 'managers only' });
       next();

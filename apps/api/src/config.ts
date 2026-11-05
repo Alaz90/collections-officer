@@ -18,8 +18,10 @@ const Env = z.object({
 
   /** firebase = verify Firebase ID tokens; demo = trust the x-demo-role header (local only). */
   AUTH_MODE: z.enum(['firebase', 'demo']).default('demo'),
-  /** Comma-separated emails that get the manager role; everyone else signed in is an officer. */
+  /** Comma-separated emails that get the manager role. */
   MANAGER_EMAILS: z.string().default(''),
+  /** Comma-separated emails allowed in as officers. Anyone not listed here or above is refused. */
+  OFFICER_EMAILS: z.string().default(''),
 
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-3.8-flash'),

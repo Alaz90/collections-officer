@@ -20,6 +20,8 @@ services:
         value: "true"
       - key: MANAGER_EMAILS
         value: manager@demo-lender.com
+      - key: OFFICER_EMAILS
+        value: officer@demo-lender.com
       - key: PUBLIC_BASE_URL
         sync: false
       - key: DASHBOARD_ORIGIN
