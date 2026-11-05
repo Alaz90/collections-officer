@@ -39,14 +39,14 @@ What the simulator taught us, and what changed in the agent because of it:
 
 ### Evaluation suite
 
-`npm run eval` scores how well the agent reads borrower replies (English, Amharic and mixed), and checks adversarial replies, receipt checks and tone. It runs in CI on every push; with `GEMINI_API_KEY` set as a repository secret, it scores Gemini and fails the build below the thresholds.
+`npm run eval` scores how well the agent reads borrower replies (English, Amharic and mixed), and checks adversarial replies, receipt checks and tone. It runs in CI on every push (deterministic checks only, so pushes never spend the free Gemini quota). Running the CI workflow by hand also scores Gemini and fails the build below the thresholds (intent 85%, amounts 85%, no false "paid").
 
 | Reader | Intent | Amounts | Dates | False "paid" | English | Amharic | Mixed |
 |---|---|---|---|---|---|---|---|
 | Rule-based fallback | 75.0% | 100.0% | 83.3% | 0 | 100.0% | 16.7% | 50.0% |
-| Gemini | run `npm run eval` with `GEMINI_API_KEY` set | | | | | | |
+| Gemini (gemini-3.5-flash-lite) | 91.7% | 100.0% | 100.0% | 0 | 94.1% | 83.3% | 100.0% |
 
-Receipt checks 8/8, tone checks 6/6, adversarial replies never marked as paid. The fallback reads English well and Amharic poorly, which is why replies go to Gemini in production.
+Receipt checks 8/8, tone checks 6/6, adversarial replies never marked as paid. The fallback reads English well and Amharic poorly, which is why replies go to Gemini in production. The Gemini row is from a manual CI run on the free tier; a few calls hit temporary 503 "high demand" errors and were answered by the fallback, so it slightly understates the model.
 
 ## How it works
 

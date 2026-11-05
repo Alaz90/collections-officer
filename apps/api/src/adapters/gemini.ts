@@ -77,6 +77,12 @@ export class GeminiAI implements AI {
     return quota;
   }
 
+  /** 503/500 "high demand" errors are temporary: wait a little before the next attempt. */
+  private async backoff(e: unknown, attempt: number) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (/\b(500|503)\b|UNAVAILABLE|INTERNAL|overloaded|high demand/i.test(msg)) await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+  }
+
   constructor(
     apiKey: string,
     private model: string,
@@ -85,25 +91,27 @@ export class GeminiAI implements AI {
   }
 
   async writeMessage(brief: MessageBrief): Promise<string> {
-    if (this.paused()) return templateMessage(brief);
-    try {
-      const res = await this.client.models.generateContent({
-        model: this.model,
-        contents: `Facts:\n${JSON.stringify(brief, null, 2)}\n\nWrite the message for the action "${brief.action}".`,
-        config: { systemInstruction: WRITER_RULES, temperature: 0.4 },
-      });
-      this.health.calls++;
-      const text = res.text?.trim();
-      return text && text.length > 0 ? text : templateMessage(brief);
-    } catch (e) {
-      this.fail('writeMessage', e);
-      return templateMessage(brief);
+    for (let attempt = 0; attempt < 2 && !this.paused(); attempt++) {
+      try {
+        const res = await this.client.models.generateContent({
+          model: this.model,
+          contents: `Facts:\n${JSON.stringify(brief, null, 2)}\n\nWrite the message for the action "${brief.action}".`,
+          config: { systemInstruction: WRITER_RULES, temperature: 0.4 },
+        });
+        this.health.calls++;
+        const text = res.text?.trim();
+        return text && text.length > 0 ? text : templateMessage(brief);
+      } catch (e) {
+        if (this.fail('writeMessage', e)) break;
+        await this.backoff(e, attempt);
+      }
     }
+    return templateMessage(brief);
   }
 
   async readReply(text: string, context: { today: string; amountDue: string; caseSummary: string }): Promise<ReplyReading> {
     const prompt = `Today is ${context.today}. Amount due: ${context.amountDue}.\nCase so far: ${context.caseSummary || 'none'}\n\nBorrower reply:\n"""${text}"""`;
-    for (let attempt = 0; attempt < 2 && !this.paused(); attempt++) {
+    for (let attempt = 0; attempt < 3 && !this.paused(); attempt++) {
       try {
         const res = await this.client.models.generateContent({
           model: this.model,
@@ -121,6 +129,7 @@ export class GeminiAI implements AI {
         this.fail('readReply', new Error(`invalid JSON shape: ${parsed.error.issues[0]?.message}`));
       } catch (e) {
         if (this.fail('readReply', e)) break;
+        await this.backoff(e, attempt);
       }
     }
     const due = Math.round(Number(context.amountDue.replace(/[^\d.]/g, '')) * 100) || 0;
