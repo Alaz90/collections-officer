@@ -96,6 +96,23 @@ export function createServer(config: Config, built = buildDeps(config)) {
   const manager = requireRole('manager');
 
   // --- Health and scheduler ----------------------------------------------
+  /** One cycle at a time: a second request while one runs never starts another. */
+  const cycle: { running: boolean; startedAt: string | null; finishedAt: string | null; actions: Record<string, number> | null; error: string | null } = {
+    running: false,
+    startedAt: null,
+    finishedAt: null,
+    actions: null,
+    error: null,
+  };
+  const startCycle = () => {
+    Object.assign(cycle, { running: true, startedAt: new Date().toISOString(), finishedAt: null, actions: null, error: null });
+    return agent
+      .dailyCycle(lenderId)
+      .then((r) => Object.assign(cycle, { actions: r.actions }))
+      .catch((e: unknown) => Object.assign(cycle, { error: e instanceof Error ? e.message : String(e) }))
+      .finally(() => Object.assign(cycle, { running: false, finishedAt: new Date().toISOString() }));
+  };
+
   app.get('/api/health', (_req, res) =>
     res.json({
       ok: true,
@@ -116,10 +133,16 @@ export function createServer(config: Config, built = buildDeps(config)) {
         await new Promise<void>((resolve, reject) => manager(req, res, (err?: unknown) => (err ? reject(err) : resolve())));
         if (res.headersSent) return;
       }
-      const { actions } = await agent.dailyCycle(lenderId);
-      res.json({ ok: true, actions });
+      if (cycle.running) return res.status(202).json({ ok: true, status: 'already running', startedAt: cycle.startedAt });
+      const run = startCycle();
+      // The scheduler gets an answer at once; the dashboard waits for the result.
+      if (viaCron) return res.status(202).json({ ok: true, status: 'started', startedAt: cycle.startedAt });
+      await run;
+      if (cycle.error) return res.status(500).json({ error: cycle.error });
+      res.json({ ok: true, actions: cycle.actions });
     }),
   );
+  app.get('/api/cycle/status', officer, (_req, res) => res.json(cycle));
 
   // --- Officer ------------------------------------------------------------
   app.get('/api/me', officer, (req, res) => res.json({ role: req.role, email: req.userEmail ?? null }));

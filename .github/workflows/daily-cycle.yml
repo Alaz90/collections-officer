@@ -11,14 +11,17 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: Start the cycle (waits for the free host to wake up)
+      - name: Wake the server (the free host sleeps when idle)
         run: |
-          for attempt in 1 2 3; do
-            code=$(curl -s -o response.json -w '%{http_code}' --max-time 120 \
-              -X POST "${{ secrets.API_URL }}/api/cycle/run" \
-              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
-            echo "attempt $attempt: HTTP $code"; cat response.json; echo
-            [ "$code" = "200" ] && exit 0
-            sleep 30
+          for attempt in 1 2 3 4 5 6; do
+            if curl -sf --max-time 60 "${{ secrets.API_URL }}/api/health"; then echo; exit 0; fi
+            echo "attempt $attempt: not awake yet"; sleep 10
           done
           exit 1
+      - name: Start the cycle
+        run: |
+          code=$(curl -s -o response.json -w '%{http_code}' --max-time 30 \
+            -X POST "${{ secrets.API_URL }}/api/cycle/run" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+          cat response.json; echo
+          [ "$code" = "202" ] || [ "$code" = "200" ]
