@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      gemini:
+        description: Also score Gemini (uses about 30 requests of the API key's daily quota)
+        type: boolean
+        default: true
+      model:
+        description: Gemini model to score
+        default: gemini-3.8-flash
 
 jobs:
   test:
@@ -18,8 +27,11 @@ jobs:
       - run: npm run build -w packages/shared
       - run: npm run typecheck
       - run: npm test
-      - name: Evaluation suite (Gemini is scored when the key is set as a repository secret)
+      # On every push only the deterministic checks run, so CI never spends the
+      # free Gemini quota the live demo needs. Run this workflow by hand to score Gemini.
+      - name: Evaluation suite (Gemini is scored on manual runs)
         run: npm run eval
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.gemini && secrets.GEMINI_API_KEY || '' }}
+          GEMINI_MODEL: ${{ inputs.model || 'gemini-3.8-flash' }}
       - run: npm run build

@@ -48,12 +48,33 @@ export const schema = (s: z.ZodTypeAny) => {
 export class GeminiAI implements AI {
   private client: GoogleGenAI;
   /** Failures are counted and logged, never hidden: the fallback keeps the agent working, the log says why. */
-  readonly health = { calls: 0, failures: 0, lastError: null as string | null };
+  readonly health = { calls: 0, failures: 0, quotaHits: 0, skipped: 0, pausedUntil: null as string | null, lastError: null as string | null };
+  private pausedUntilMs = 0;
 
-  private fail(where: string, e: unknown) {
+  /** True while the API key is out of quota: skip the call and use the fallback instead of burning retries. */
+  private paused(): boolean {
+    if (Date.now() < this.pausedUntilMs) {
+      this.health.skipped++;
+      return true;
+    }
+    return false;
+  }
+
+  /** Returns true if the error was a quota/rate limit (429), which must not be retried. */
+  private fail(where: string, e: unknown): boolean {
+    const msg = e instanceof Error ? e.message : String(e);
     this.health.failures++;
-    this.health.lastError = `${where}: ${e instanceof Error ? e.message : String(e)}`.slice(0, 400);
-    console.warn(`[gemini] ${this.health.lastError}`);
+    this.health.lastError = `${where}: ${msg}`.slice(0, 400);
+    const quota = /\b429\b|RESOURCE_EXHAUSTED|exceeded your current quota/i.test(msg);
+    if (quota) {
+      this.health.quotaHits++;
+      const retry = msg.match(/retry in ([\d.]+)s|"retryDelay":"(\d+)s"/i);
+      const seconds = retry ? Number(retry[1] ?? retry[2]) : 15 * 60;
+      this.pausedUntilMs = Date.now() + Math.max(30, seconds) * 1000;
+      this.health.pausedUntil = new Date(this.pausedUntilMs).toISOString();
+      console.warn(`[gemini] quota reached, using the fallback until ${this.health.pausedUntil}`);
+    } else console.warn(`[gemini] ${this.health.lastError}`);
+    return quota;
   }
 
   constructor(
@@ -64,6 +85,7 @@ export class GeminiAI implements AI {
   }
 
   async writeMessage(brief: MessageBrief): Promise<string> {
+    if (this.paused()) return templateMessage(brief);
     try {
       const res = await this.client.models.generateContent({
         model: this.model,
@@ -81,7 +103,7 @@ export class GeminiAI implements AI {
 
   async readReply(text: string, context: { today: string; amountDue: string; caseSummary: string }): Promise<ReplyReading> {
     const prompt = `Today is ${context.today}. Amount due: ${context.amountDue}.\nCase so far: ${context.caseSummary || 'none'}\n\nBorrower reply:\n"""${text}"""`;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 2 && !this.paused(); attempt++) {
       try {
         const res = await this.client.models.generateContent({
           model: this.model,
@@ -98,7 +120,7 @@ export class GeminiAI implements AI {
         if (parsed.success) return parsed.data;
         this.fail('readReply', new Error(`invalid JSON shape: ${parsed.error.issues[0]?.message}`));
       } catch (e) {
-        this.fail('readReply', e);
+        if (this.fail('readReply', e)) break;
       }
     }
     const due = Math.round(Number(context.amountDue.replace(/[^\d.]/g, '')) * 100) || 0;
@@ -106,6 +128,7 @@ export class GeminiAI implements AI {
   }
 
   async readReceipt(image: { mimeType: string; base64: string }): Promise<ReceiptFields> {
+    if (this.paused()) return { transactionId: null, amountCents: null, date: null, sender: null, receivingAccount: null, provider: null };
     try {
       const res = await this.client.models.generateContent({
         model: this.model,

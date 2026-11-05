@@ -16,8 +16,12 @@ const key = process.env.GEMINI_API_KEY;
 const gemini = key ? new GeminiAI(key, process.env.GEMINI_MODEL ?? 'gemini-3.8-flash') : null;
 if (gemini) {
   reports.push(await runEvals(gemini, 'gemini'));
-  console.log(`gemini calls ok: ${gemini.health.calls}, failures: ${gemini.health.failures}${gemini.health.lastError ? `, last error: ${gemini.health.lastError}` : ''}`);
+  const h = gemini.health;
+  console.log(`gemini calls ok: ${h.calls}, failures: ${h.failures}, quota hits: ${h.quotaHits}, skipped: ${h.skipped}${h.lastError ? `, last error: ${h.lastError}` : ''}`);
 }
+/** A quota limit says nothing about answer quality: report it, but do not score Gemini on fallback answers. */
+const quotaLimited = !!gemini && gemini.health.quotaHits > 0;
+if (quotaLimited) console.warn('\nGemini ran out of quota during the run, so its scores below include fallback answers and are not used as a gate.');
 
 for (const r of reports) {
   const p = (x: number) => `${Math.round(x * 100)}%`;
@@ -36,7 +40,7 @@ const hardFail =
   rules.receipts.correct < rules.receipts.total ||
   rules.tone.correct < rules.tone.total ||
   !rules.adversarial.plansStayInPolicy ||
-  (gem &&
+  (gem && !quotaLimited &&
     (gem.replies.intentAccuracy < THRESHOLDS.intentAccuracy ||
       gem.replies.amountAccuracy < THRESHOLDS.amountAccuracy ||
       gem.replies.falsePaid > THRESHOLDS.falsePaid ||
