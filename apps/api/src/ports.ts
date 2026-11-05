@@ -15,10 +15,19 @@ import type {
   ReplyReading,
 } from '@co/shared';
 
+/** A playbook override for one group of borrowers, e.g. farmers in a dry region. */
+export interface Segment {
+  name: string;
+  region?: string;
+  sector?: Borrower['sector'];
+  playbook: Partial<Playbook>;
+}
+
 export interface Lender {
   id: string;
   name: string;
   playbook: Playbook;
+  segments?: Segment[];
   /** Account number(s) borrowers transfer to; used by the receipt check. */
   receivingAccounts: string[];
   timezoneOffsetHours: number;
@@ -102,4 +111,14 @@ export interface Deps {
   weather: Weather;
   clock: Clock;
   ids: () => string;
+}
+
+export function playbookFor(lender: Lender, borrower: Pick<Borrower, 'region' | 'sector'>): Playbook {
+  let pb = lender.playbook;
+  for (const seg of lender.segments ?? []) {
+    if ((seg.region === undefined || seg.region === borrower.region) && (seg.sector === undefined || seg.sector === borrower.sector)) {
+      pb = { ...pb, ...seg.playbook };
+    }
+  }
+  return pb;
 }

@@ -1,4 +1,4 @@
-import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
+import { applicationDefault, cert, getApps, initializeApp, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 import type { Collection, Store } from '../ports.js';
 
@@ -28,12 +28,18 @@ class FirestoreCollection<T extends { id: string }> implements Collection<T> {
 }
 
 /**
- * Firestore store. On Cloud Run or any Google host it uses the default
- * credentials; locally, GOOGLE_APPLICATION_CREDENTIALS points to a service
- * account file that is never committed.
+ * Firebase app. On Google hosts it uses the default credentials; elsewhere
+ * (Render), FIREBASE_SERVICE_ACCOUNT holds the service account JSON as an
+ * environment secret.
  */
-export function firestoreStore(projectId?: string): Store {
-  const app = getApps()[0] ?? initializeApp({ credential: applicationDefault(), projectId });
+export function firebaseApp(projectId?: string, serviceAccountJson?: string): App {
+  const existing = getApps()[0];
+  if (existing) return existing;
+  const credential = serviceAccountJson ? cert(JSON.parse(serviceAccountJson)) : applicationDefault();
+  return initializeApp({ credential, projectId });
+}
+
+export function firestoreStore(app: App): Store {
   const db = getFirestore(app);
   const c = <T extends { id: string }>(name: string) => new FirestoreCollection<T>(db, name);
   return {

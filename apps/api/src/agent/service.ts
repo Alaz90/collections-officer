@@ -8,7 +8,7 @@ import { applyPlanToLoan, evaluatePlan } from '../domain/plans.js';
 import { checkContact, checkPlan, checkTone, planTarget, type ProposedInstalment } from '../domain/policy.js';
 import { checkRealism } from '../domain/realism.js';
 import { assessRisk, collectSignals, DEFAULT_WEIGHTS, type RiskWeights } from '../domain/risk.js';
-import type { Deps, Lender, MessageBrief, ReceiptFields } from '../ports.js';
+import { playbookFor, type Deps, type Lender, type MessageBrief, type ReceiptFields } from '../ports.js';
 
 /**
  * The agent. Each entry point (daily cycle, reply, payment, receipt) runs one
@@ -57,6 +57,11 @@ export class CollectionsAgent {
     const l = await this.deps.store.lenders.get(lenderId);
     if (!l) throw new Error(`unknown lender ${lenderId}`);
     return l;
+  }
+
+  private async playbookForLoan(lender: Lender, loan: Loan) {
+    const borrower = await this.deps.store.borrowers.get(loan.borrowerId);
+    return borrower ? playbookFor(lender, borrower) : lender.playbook;
   }
 
   private localHour(lender: Lender) {
@@ -126,6 +131,35 @@ export class CollectionsAgent {
   // -------------------------------------------------------------------------
   // Daily cycle
 
+  /** Risk and the action the agent would take today, for every open loan, without acting. */
+  async preview(lenderId: string): Promise<CaseView[]> {
+    const lender = await this.lender(lenderId);
+    const today = this.today();
+    const [loans, borrowers] = await Promise.all([this.deps.store.loans.list(lenderId), this.deps.store.borrowers.list(lenderId)]);
+    const byId = new Map(borrowers.map((b) => [b.id, b]));
+    const out: CaseView[] = [];
+    for (const loan of loans) {
+      const borrower = byId.get(loan.borrowerId);
+      if (!borrower || loan.status === 'closed' || loan.status === 'defaulted') continue;
+      const a = await this.assess(lenderId, loan, borrower);
+      const decision = decide({
+        loan,
+        borrower,
+        risk: a.risk,
+        playbook: playbookFor(lender, borrower),
+        brokenPlans: a.context.brokenPlans,
+        activePlan: a.context.activePlan !== undefined,
+        unansweredMessages: a.context.unanswered,
+        rainfallRatio: a.region && borrower.sector === 'farming' ? a.region.ratio : null,
+        contactedForCurrentInstalment: a.context.contactedForCurrentInstalment,
+        daysSinceLastContact: a.context.daysSinceLastContact,
+        today,
+      });
+      out.push({ borrower, loan, risk: a.risk, decision, region: a.region });
+    }
+    return out;
+  }
+
   async dailyCycle(lenderId: string): Promise<{ cases: CaseView[]; actions: Record<string, number> }> {
     const lender = await this.lender(lenderId);
     const today = this.today();
@@ -165,7 +199,7 @@ export class CollectionsAgent {
         loan,
         borrower,
         risk: a.risk,
-        playbook: lender.playbook,
+        playbook: playbookFor(lender, borrower),
         brokenPlans: a.context.brokenPlans,
         activePlan: a.context.activePlan !== undefined,
         unansweredMessages: a.context.unanswered,
@@ -227,7 +261,7 @@ export class CollectionsAgent {
             reason: decision.reason,
           }, ctx.sentToday, trace);
         }
-        const instalments = earlyScheduleChange({ loan, playbook: lender.playbook, incomeDate: borrower.expectedIncomeDate, today });
+        const instalments = earlyScheduleChange({ loan, playbook: playbookFor(lender, borrower), incomeDate: borrower.expectedIncomeDate, today });
         const plan = await this.proposePlan(lender, loan, 'schedule_change', instalments, ctx, trace);
         if (!plan) return 'schedule change not possible; handed to officer';
         return this.sendMessage(lender, borrower, {
@@ -265,7 +299,7 @@ export class CollectionsAgent {
   ): Promise<Plan | null> {
     const today = this.today();
     const target = planTarget(loan, today).cents;
-    const policy = checkPlan({ loan, playbook: lender.playbook, instalments, targetCents: target, plansSoFar: ctx.plans.filter((p) => p.status !== 'rejected' && p.status !== 'expired' && p.status !== 'offered').length, today });
+    const policy = checkPlan({ loan, playbook: await this.playbookForLoan(lender, loan), instalments, targetCents: target, plansSoFar: ctx.plans.filter((p) => p.status !== 'rejected' && p.status !== 'expired' && p.status !== 'offered').length, today });
     trace.policy(`plan ${policy.verdict}`, policy);
     const realism = checkRealism({
       instalments,
@@ -315,7 +349,7 @@ export class CollectionsAgent {
     const text = await this.deps.ai.writeMessage(full);
     trace.tool('write_message', { action: brief.action });
     const tone = checkTone(text);
-    const contact = checkContact({ borrower, playbook: lender.playbook, localHour: this.localHour(lender), sentToday });
+    const contact = checkContact({ borrower, playbook: playbookFor(lender, borrower), localHour: this.localHour(lender), sentToday });
     trace.policy(`tone ${tone.verdict}, contact ${contact.verdict}`, { tone, contact });
 
     const needsApproval =
@@ -408,7 +442,7 @@ export class CollectionsAgent {
       }
       case 'partial_offer':
       case 'needs_more_time': {
-        const built = buildPlan({ loan, playbook: lender.playbook, reading, today });
+        const built = buildPlan({ loan, playbook: playbookFor(lender, borrower), reading, today });
         trace.decision(`negotiation: ${built.kind}`, built);
         if (built.kind === 'nothing_to_plan') {
           outcome = 'nothing to plan';
@@ -594,7 +628,7 @@ export class CollectionsAgent {
     if (!borrower) throw new Error('unknown borrower');
     const text = editedText ?? m.text;
     if (checkTone(text).verdict === 'deny') throw new Error('message fails the tone check');
-    const contact = checkContact({ borrower, playbook: lender.playbook, localHour: this.localHour(lender), sentToday: 0 });
+    const contact = checkContact({ borrower, playbook: playbookFor(lender, borrower), localHour: this.localHour(lender), sentToday: 0 });
     if (contact.verdict === 'deny') throw new Error(contact.reasons.join('; '));
     const delivered = (await this.deps.channel.send(borrower, text)).delivered;
     await this.deps.store.messages.put({ ...m, text, status: delivered ? 'sent' : 'blocked', at: this.deps.clock.now().toISOString() });

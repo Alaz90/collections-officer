@@ -69,6 +69,7 @@ export class OpenMeteoWeather implements Weather {
         // A dry season with little normal rain is not a shortfall.
         ratio: normal < 5 ? 1 : Math.round((recent / normal) * 100) / 100,
         asOf: today,
+        source: 'open-meteo',
       };
       this.cache.set(key, signal);
       return signal;
@@ -85,10 +86,27 @@ export class FixedWeather implements Weather {
   async rainfall(region: string, today: string): Promise<RegionSignal | null> {
     const ratio = this.ratios[region];
     if (ratio === undefined) return null;
-    return { region, recentMm: Math.round(ratio * 100), normalMm: 100, ratio, asOf: today };
+    return { region, recentMm: Math.round(ratio * 100), normalMm: 100, ratio, asOf: today, source: 'demo' as const };
   }
 
   set(region: string, ratio: number) {
     this.ratios[region] = ratio;
+  }
+}
+
+/**
+ * Live readings, with labelled demo values for chosen regions so the demo
+ * shows a dry spell whatever the real season is. The UI marks them "demo".
+ */
+export class DemoOverrideWeather implements Weather {
+  constructor(
+    private live: Weather,
+    private overrides: Record<string, number>,
+  ) {}
+
+  async rainfall(region: string, today: string): Promise<RegionSignal | null> {
+    const ratio = this.overrides[region];
+    if (ratio !== undefined) return { region, recentMm: Math.round(ratio * 100), normalMm: 100, ratio, asOf: today, source: 'demo' };
+    return this.live.rainfall(region, today);
   }
 }

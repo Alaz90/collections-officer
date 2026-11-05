@@ -1,4 +1,4 @@
-import { DEFAULT_PLAYBOOK, type Loan, type Plan } from '@co/shared';
+import { DEFAULT_PLAYBOOK, type Loan, type Plan, type Playbook } from '@co/shared';
 import { CollectionsAgent } from '../agent/service.js';
 import { OutboxChannel } from '../adapters/channels.js';
 import { fixedClock, memoryStore, sequentialIds } from '../adapters/memory.js';
@@ -6,7 +6,7 @@ import { FakePayments } from '../adapters/payments.js';
 import { TemplateAI } from '../adapters/templateAI.js';
 import { addDays, daysBetween } from '../domain/dates.js';
 import { applyPayment, daysPastDue, overdueCents, remaining } from '../domain/loanMath.js';
-import type { Lender, Weather } from '../ports.js';
+import type { Lender, Segment, Weather } from '../ports.js';
 import { makePortfolio, rainfallOn, rng, Wallets, type Assumptions, type Rng, type SimBorrower } from './world.js';
 
 export interface SimResult {
@@ -48,8 +48,9 @@ function isDefault(loan: Loan, end: string, instalment: number) {
   return daysPastDue(loan, end) >= 60 && overdueCents(loan, end) >= instalment / 2;
 }
 
-function finish(strategy: SimResult['strategy'], loans: Loan[], world: SimBorrower[], outreach: number, extra: Partial<SimResult>): SimResult {
-  const end = addDays(SIM_START, SIM_DAYS);
+function finish(strategy: SimResult['strategy'], loans: Loan[], world: SimBorrower[], outreach: number, extra: Partial<SimResult> & { endDay?: string }): SimResult {
+  const { endDay, ...rest } = extra;
+  const end = endDay ?? addDays(SIM_START, SIM_DAYS);
   const inst = new Map(world.map((w) => [w.loan.id, instalmentOf(w)]));
   const dueCents = loans.reduce((s, l) => s + l.principalCents, 0);
   const collectedCents = loans.reduce((s, l) => s + l.schedule.reduce((t, i) => t + i.paidCents, 0), 0);
@@ -68,7 +69,7 @@ function finish(strategy: SimResult['strategy'], loans: Loan[], world: SimBorrow
     plansAgreed: 0,
     plansKept: 0,
     planKeptRate: null,
-    ...extra,
+    ...rest,
   };
 }
 
@@ -83,9 +84,19 @@ const callsPerDay = (a: Assumptions, n: number) => Math.max(1, Math.round((a.off
 // ---------------------------------------------------------------------------
 // Baseline: fixed reminders, no negotiation, officer calls the longest-overdue.
 
-export function runBaseline(a: Assumptions, n: number, seed: number): SimResult {
+export interface RunOptions {
+  /** Use this portfolio instead of a generated one (the policy sandbox does). */
+  world?: SimBorrower[];
+  playbook?: Partial<Playbook>;
+  segments?: Segment[];
+  /** Days to simulate; defaults to SIM_DAYS. */
+  days?: number;
+}
+
+export function runBaseline(a: Assumptions, n: number, seed: number, opts: RunOptions = {}): SimResult {
   const r = rng(seed);
-  const world = makePortfolio(n, SIM_START, a, rng(seed));
+  const world = opts.world ?? makePortfolio(n, SIM_START, a, rng(seed));
+  n = world.length;
   const loans = new Map(world.map((w) => [w.loan.id, structuredClone(w.loan)]));
   const lastReminder = new Map<string, string>();
   const lastCall = new Map<string, string>();
@@ -154,9 +165,10 @@ class SimWeather implements Weather {
   }
 }
 
-export async function runAgent(a: Assumptions, n: number, seed: number): Promise<SimResult> {
+export async function runAgent(a: Assumptions, n: number, seed: number, opts: RunOptions = {}): Promise<SimResult> {
   const r = rng(seed);
-  const world = makePortfolio(n, SIM_START, a, rng(seed));
+  const world = opts.world ?? makePortfolio(n, SIM_START, a, rng(seed));
+  n = world.length;
   const byId = new Map(world.map((w) => [w.borrower.id, w]));
   const store = memoryStore({ copy: false });
   const channel = new OutboxChannel();
@@ -165,7 +177,14 @@ export async function runAgent(a: Assumptions, n: number, seed: number): Promise
   const ids = sequentialIds('x');
   const agent = new CollectionsAgent({ store, ai: new TemplateAI(), payments, channel, weather: new SimWeather(a, rng(seed + 7)), clock, ids });
 
-  const lender: Lender = { id: 'sim', name: 'Sim Lender', playbook: { ...DEFAULT_PLAYBOOK, autonomy: 'auto' }, receivingAccounts: [], timezoneOffsetHours: 3 };
+  const lender: Lender = {
+    id: 'sim',
+    name: 'Sim Lender',
+    playbook: { ...DEFAULT_PLAYBOOK, ...opts.playbook, autonomy: 'auto' },
+    segments: opts.segments,
+    receivingAccounts: [],
+    timezoneOffsetHours: 3,
+  };
   await store.lenders.put(lender);
   for (const w of world) {
     await store.borrowers.put(structuredClone(w.borrower));
@@ -190,7 +209,7 @@ export async function runAgent(a: Assumptions, n: number, seed: number): Promise
     await agent.handlePayment('sim', ref);
   };
 
-  for (let d = 0; d < SIM_DAYS; d++) {
+  for (let d = 0; d < (opts.days ?? SIM_DAYS); d++) {
     const day = addDays(SIM_START, d);
     clock.set(`${day}T07:00:00Z`);
     wallets.advance(day);
@@ -241,8 +260,13 @@ export async function runAgent(a: Assumptions, n: number, seed: number): Promise
       }
     }
 
-    // The manager reviews the approval queue once a day.
-    for (const p of (await store.plans.list('sim')).filter((x) => x.status === 'pending_approval')) await agent.approvePlan('sim', p.id);
+    // The manager reviews the approval queue every third day and approves most plans, not all.
+    if (d % 3 === 0) {
+      for (const p of (await store.plans.list('sim')).filter((x) => x.status === 'pending_approval')) {
+        if (r.chance(0.7)) await agent.approvePlan('sim', p.id);
+        else await store.plans.put({ ...p, status: 'rejected' });
+      }
+    }
 
     // Plan instalments on their dates; otherwise the same unprompted behaviour as the baseline.
     const active = new Map((await store.plans.list('sim')).filter((p) => p.status === 'active').map((p) => [p.loanId, p]));
@@ -295,6 +319,7 @@ export async function runAgent(a: Assumptions, n: number, seed: number): Promise
   const handovers = runs.filter((x) => x.steps.some((s) => s.kind === 'tool_call' && s.detail === 'hand_over')).length;
   const outreach = channel.sent.filter((m) => !/^Thank you\b/.test(m.text) || /plan/.test(m.text)).length;
   return finish('agent', loans, world, outreach, {
+    endDay: addDays(SIM_START, opts.days ?? SIM_DAYS),
     handovers,
     plansAgreed: agreed.length,
     plansKept: kept,

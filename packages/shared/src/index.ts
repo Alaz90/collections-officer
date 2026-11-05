@@ -205,6 +205,8 @@ export const RegionSignal = z.object({
   /** recent / normal; below 1 means drier than usual. */
   ratio: z.number().nonnegative(),
   asOf: IsoDate,
+  /** Where the reading came from: live Open-Meteo data or a labelled demo value. */
+  source: z.enum(['open-meteo', 'demo']).optional(),
 });
 export type RegionSignal = z.infer<typeof RegionSignal>;
 

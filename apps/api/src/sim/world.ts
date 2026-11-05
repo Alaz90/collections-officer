@@ -52,6 +52,8 @@ export interface Assumptions {
   personaMix: [number, number, number, number];
   /** Chance that a signal is misleading (risk looks wrong), 0..1. */
   signalNoise: number;
+  /** Regions in a dry spell; defaults to DRY_REGIONS. */
+  dryRegions?: string[];
   /** Calls the officer can make per day, per 200 borrowers. */
   officerCallsPerDay: number;
   /** Chance that a borrower who cannot pay everything pays what they can, unprompted, on a given reminder. */
@@ -122,7 +124,7 @@ export function makePortfolio(n: number, start: string, a: Assumptions, r: Rng):
 /** Rainfall ratio for a region on a day: a dry spell in two regions. */
 export function rainfallOn(region: string, day: string, start: string, a: Assumptions): number {
   const d = daysBetween(start, day);
-  const dry = (DRY_REGIONS as readonly string[]).includes(region) && d >= 25 && d <= 95;
+  const dry = (a.dryRegions ?? [...DRY_REGIONS] as string[]).includes(region) && d >= 25 && d <= 95;
   return dry ? a.dryRatio : 1;
 }
 
@@ -167,7 +169,7 @@ export class Wallets {
     for (const w of this.world) {
       const inst = w.loan.schedule[0]!.amountCents;
       let c = this.cash.get(w.loan.id)! * (1 - DAILY_LEAK) + dailyIncome(w.traits, day, this.start, this.a) * inst;
-      if (w.traits.harvestDate === day) c += HARVEST_LUMP * inst * (1 - this.a.weatherEffect * (1 - this.a.dryRatio) * (DRY.has(w.traits.region) ? 0.5 : 0));
+      if (w.traits.harvestDate === day) c += HARVEST_LUMP * inst * (1 - this.a.weatherEffect * (1 - this.a.dryRatio) * ((this.a.dryRegions ?? [...DRY_REGIONS] as string[]).includes(w.traits.region) ? 0.5 : 0));
       this.cash.set(w.loan.id, c);
     }
   }
@@ -181,4 +183,3 @@ export class Wallets {
   }
 }
 
-const DRY = new Set<string>(DRY_REGIONS);
