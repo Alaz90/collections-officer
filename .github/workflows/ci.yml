@@ -12,7 +12,7 @@ on:
         default: true
       model:
         description: Gemini model to score
-        default: gemini-3.8-flash
+        default: gemini-3.5-flash-lite
 
 jobs:
   test:
@@ -33,5 +33,5 @@ jobs:
         run: npm run eval
         env:
           GEMINI_API_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.gemini && secrets.GEMINI_API_KEY || '' }}
-          GEMINI_MODEL: ${{ inputs.model || 'gemini-3.8-flash' }}
+          GEMINI_MODEL: ${{ inputs.model || 'gemini-3.5-flash-lite' }}
       - run: npm run build

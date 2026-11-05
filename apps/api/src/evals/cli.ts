@@ -13,7 +13,7 @@ const THRESHOLDS = { intentAccuracy: 0.85, amountAccuracy: 0.85, falsePaid: 0 };
 
 const reports: EvalReport[] = [await runEvals(new TemplateAI(), 'rules')];
 const key = process.env.GEMINI_API_KEY;
-const gemini = key ? new GeminiAI(key, process.env.GEMINI_MODEL ?? 'gemini-3.8-flash') : null;
+const gemini = key ? new GeminiAI(key, process.env.GEMINI_MODEL ?? 'gemini-3.5-flash-lite') : null;
 if (gemini) {
   reports.push(await runEvals(gemini, 'gemini'));
   const h = gemini.health;

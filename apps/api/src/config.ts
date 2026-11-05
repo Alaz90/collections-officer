@@ -24,7 +24,7 @@ const Env = z.object({
   OFFICER_EMAILS: z.string().default(''),
 
   GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
 
   CHAPA_SECRET_KEY: z.string().optional(),
   CHAPA_WEBHOOK_SECRET: z.string().optional(),
