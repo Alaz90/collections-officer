@@ -1,0 +1,97 @@
+{
+  "borrowers": 200,
+  "seeds": 2,
+  "generatedAt": "2026-11-05T12:05:36.166Z",
+  "rows": [
+    {
+      "scenario": "Weather matters",
+      "baseline": {
+        "collectionRate": 0.9604999999999999,
+        "defaultRate": 0.095,
+        "messagesPer1000Birr": 1.8935,
+        "planKeptRate": null
+      },
+      "agent": {
+        "collectionRate": 0.9735,
+        "defaultRate": 0.0825,
+        "messagesPer1000Birr": 2.7445,
+        "planKeptRate": 0.49550000000000005
+      }
+    },
+    {
+      "scenario": "Weather matters a little",
+      "baseline": {
+        "collectionRate": 0.964,
+        "defaultRate": 0.0875,
+        "messagesPer1000Birr": 1.8205,
+        "planKeptRate": null
+      },
+      "agent": {
+        "collectionRate": 0.976,
+        "defaultRate": 0.06,
+        "messagesPer1000Birr": 2.592,
+        "planKeptRate": 0.5455
+      }
+    },
+    {
+      "scenario": "Weather does not matter",
+      "baseline": {
+        "collectionRate": 0.963,
+        "defaultRate": 0.08499999999999999,
+        "messagesPer1000Birr": 1.7850000000000001,
+        "planKeptRate": null
+      },
+      "agent": {
+        "collectionRate": 0.9784999999999999,
+        "defaultRate": 0.057499999999999996,
+        "messagesPer1000Birr": 2.4655,
+        "planKeptRate": 0.542
+      }
+    },
+    {
+      "scenario": "Harder borrowers",
+      "baseline": {
+        "collectionRate": 0.8955,
+        "defaultRate": 0.225,
+        "messagesPer1000Birr": 2.1825,
+        "planKeptRate": null
+      },
+      "agent": {
+        "collectionRate": 0.943,
+        "defaultRate": 0.1225,
+        "messagesPer1000Birr": 3.3365,
+        "planKeptRate": 0.46599999999999997
+      }
+    },
+    {
+      "scenario": "Noisy signals",
+      "baseline": {
+        "collectionRate": 0.9604999999999999,
+        "defaultRate": 0.095,
+        "messagesPer1000Birr": 1.8935,
+        "planKeptRate": null
+      },
+      "agent": {
+        "collectionRate": 0.9735,
+        "defaultRate": 0.0775,
+        "messagesPer1000Birr": 2.808,
+        "planKeptRate": 0.474
+      }
+    },
+    {
+      "scenario": "Borrowers pay part unasked",
+      "baseline": {
+        "collectionRate": 0.982,
+        "defaultRate": 0.0475,
+        "messagesPer1000Birr": 1.686,
+        "planKeptRate": null
+      },
+      "agent": {
+        "collectionRate": 0.984,
+        "defaultRate": 0.05,
+        "messagesPer1000Birr": 2.8099999999999996,
+        "planKeptRate": 0.5145
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { askManagerAgent } from './agent/manager.js';
 import { CollectionsAgent } from './agent/service.js';
 import { OutboxChannel, TelegramChannel } from './adapters/channels.js';
+import { cachedStore } from './adapters/cached.js';
 import { firebaseApp, firestoreStore } from './adapters/firestore.js';
 import { GeminiAI } from './adapters/gemini.js';
 import { memoryStore, uuid } from './adapters/memory.js';
@@ -32,7 +33,7 @@ declare module 'express-serve-static-core' {
 
 export function buildDeps(config: Config) {
   const app = config.STORE === 'firestore' || config.AUTH_MODE === 'firebase' ? firebaseApp(config.FIREBASE_PROJECT_ID, config.FIREBASE_SERVICE_ACCOUNT) : null;
-  const store = config.STORE === 'firestore' && app ? firestoreStore(app) : memoryStore();
+  const store = config.STORE === 'firestore' && app ? cachedStore(firestoreStore(app)) : memoryStore();
   const ai = config.GEMINI_API_KEY ? new GeminiAI(config.GEMINI_API_KEY, config.GEMINI_MODEL) : new TemplateAI();
   const fake = new FakePayments(config.PUBLIC_BASE_URL);
   const payments = config.CHAPA_SECRET_KEY ? new ChapaPayments(config.CHAPA_SECRET_KEY, config.PUBLIC_BASE_URL) : fake;

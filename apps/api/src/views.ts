@@ -1,4 +1,4 @@
-import type { Loan } from '@co/shared';
+import type { Loan, Payment } from '@co/shared';
 import type { CaseView, CollectionsAgent } from './agent/service.js';
 import { addDays, daysBetween } from './domain/dates.js';
 import { forecast } from './domain/forecast.js';
@@ -29,14 +29,15 @@ export async function todayView(store: Store, agent: CollectionsAgent, lenderId:
     .filter((p) => p.status === 'active')
     .reduce((s, p) => s + p.instalments.filter((i) => i.dueDate >= today).reduce((t, i) => t + i.amountCents, 0), 0);
 
+  const row = (c: CaseView) => ({ ...caseRow(c), schedule: c.loan.schedule, paidLate: paidLateDates(c.loan, payments) });
   const callList = cases
     .filter((c) => c.loan.status === 'handed_over' || c.decision.action === 'hand_over')
     .sort((a, b) => b.decision.expectedAtRiskCents - a.decision.expectedAtRiskCents)
-    .map(caseRow);
+    .map(row);
   const rising = cases
     .filter((c) => daysPastDue(c.loan, today) === 0 && c.risk.level !== 'low')
     .sort((a, b) => b.risk.missProbability - a.risk.missProbability)
-    .map(caseRow);
+    .map(row);
 
   return {
     today,
@@ -44,8 +45,26 @@ export async function todayView(store: Store, agent: CollectionsAgent, lenderId:
     callList,
     rising,
     plannedActions: countBy(cases.map((c) => c.decision.action)),
-    cases: cases.map(caseRow),
+    cases: cases.map(row),
   };
+}
+
+/** Due dates of instalments completed after they were due. */
+export function paidLateDates(loan: Loan, payments: Payment[]): string[] {
+  const due = loan.schedule.map((i) => ({ date: i.dueDate, amount: i.amountCents, paid: 0 }));
+  const late: string[] = [];
+  for (const p of payments.filter((x) => x.loanId === loan.id && x.status !== 'rejected').sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))) {
+    let left = p.amountCents;
+    for (const d of due) {
+      if (left <= 0) break;
+      const take = Math.min(left, d.amount - d.paid);
+      if (take <= 0) continue;
+      d.paid += take;
+      left -= take;
+      if (d.paid >= d.amount && p.receivedAt.slice(0, 10) > d.date) late.push(d.date);
+    }
+  }
+  return late;
 }
 
 function caseRow(c: CaseView) {

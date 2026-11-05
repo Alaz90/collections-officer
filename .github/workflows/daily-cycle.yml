@@ -1,0 +1,24 @@
+name: Daily collections cycle
+
+# Plays the role of Cloud Scheduler: starts the agent's morning run.
+# 05:00 UTC is 08:00 in Addis Ababa.
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start the cycle (waits for the free host to wake up)
+        run: |
+          for attempt in 1 2 3; do
+            code=$(curl -s -o response.json -w '%{http_code}' --max-time 120 \
+              -X POST "${{ secrets.API_URL }}/api/cycle/run" \
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+            echo "attempt $attempt: HTTP $code"; cat response.json; echo
+            [ "$code" = "200" ] && exit 0
+            sleep 30
+          done
+          exit 1

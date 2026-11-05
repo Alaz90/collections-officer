@@ -1,0 +1,38 @@
+# Render blueprint: one free web service serving the API and the dashboard.
+services:
+  - type: web
+    name: collections-officer
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build -w packages/shared && npm run build -w apps/api && VITE_AUTH_MODE=firebase npm run build -w apps/web
+    startCommand: node apps/api/dist/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: STORE
+        value: firestore
+      - key: AUTH_MODE
+        value: firebase
+      - key: WEATHER
+        value: open-meteo
+      - key: SEED_DEMO
+        value: "true"
+      - key: MANAGER_EMAILS
+        value: manager@demo-lender.com
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: DASHBOARD_ORIGIN
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CHAPA_SECRET_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false

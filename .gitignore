@@ -7,4 +7,4 @@ coverage/
 *.log
 .DS_Store
 service-account*.json
-sim-results.json
+eval-results.json
