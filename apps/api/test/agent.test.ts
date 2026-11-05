@@ -134,6 +134,21 @@ describe('collections agent', () => {
     expect(strict.channel.sent).toHaveLength(1);
   });
 
+  it('approving a plan sends its offer without a second approval', async () => {
+    const strict = setup({ ...LENDER, playbook: playbook({ autonomy: 'approve_sensitive' }) });
+    await strict.deps.store.lenders.put(strict.lender);
+    await strict.deps.store.borrowers.put(borrower({ sector: 'trade' }));
+    await strict.deps.store.loans.put(loan());
+    await strict.deps.store.plans.put({
+      id: 'p1', lenderId: 'l1', loanId: 'loan1', kind: 'payment_plan', instalments: [{ dueDate: '2026-11-20', amountCents: 60_000 }, { dueDate: '2026-12-20', amountCents: 140_000 }],
+      status: 'pending_approval', realism: { ok: true, score: 0.8, reasons: [] }, createdAt: '2026-11-10T07:00:00Z',
+    });
+    await strict.agent.approvePlan('l1', 'p1');
+    expect(strict.channel.sent).toHaveLength(1);
+    const [m] = await strict.deps.store.messages.list('l1');
+    expect(m!.status).toBe('sent');
+  });
+
   it('never messages outside contact hours', async () => {
     s.clock.set('2026-11-10T19:00:00Z'); // 22:00 local
     await s.deps.store.borrowers.put(borrower({ sector: 'trade' }));

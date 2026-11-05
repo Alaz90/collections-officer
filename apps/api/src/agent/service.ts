@@ -338,6 +338,8 @@ export class CollectionsAgent {
     brief: Omit<MessageBrief, 'borrowerName' | 'language' | 'lenderName' | 'caseSummary'>,
     sentToday: number,
     trace: Trace,
+    /** A person already approved what this message offers (for example a plan), so it does not need a second approval. Tone and contact checks still apply. */
+    opts: { approved?: boolean } = {},
   ): Promise<string> {
     const nice = (d: string) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : d);
     const full: MessageBrief = {
@@ -356,7 +358,8 @@ export class CollectionsAgent {
     trace.policy(`tone ${tone.verdict}, contact ${contact.verdict}`, { tone, contact });
 
     const needsApproval =
-      lender.playbook.autonomy === 'approve_all' || (lender.playbook.autonomy === 'approve_sensitive' && SENSITIVE.has(brief.action));
+      !opts.approved &&
+      (lender.playbook.autonomy === 'approve_all' || (lender.playbook.autonomy === 'approve_sensitive' && SENSITIVE.has(brief.action)));
     let status: Message['status'];
     if (tone.verdict === 'deny') status = 'blocked';
     else if (needsApproval) status = 'pending_approval';
@@ -654,7 +657,7 @@ export class CollectionsAgent {
       dueDate: plan.instalments[0]!.dueDate,
       plan: plan.instalments.map((i) => ({ dueDate: i.dueDate, amount: formatBirr(i.amountCents) })),
       reason: 'approved by manager',
-    }, 0, trace);
+    }, 0, trace, { approved: true });
     await this.record({ lenderId, borrowerId: borrower.id, trigger: 'manager_request', steps: trace.steps, outcome: 'plan offered after approval' });
   }
 }
