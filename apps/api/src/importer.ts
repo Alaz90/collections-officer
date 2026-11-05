@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { schema } from './adapters/gemini.js';
 import type { Borrower, Loan } from '@co/shared';
 import { addDays } from './domain/dates.js';
 
@@ -80,7 +80,7 @@ export async function suggestMapping(headers: string[], sample: string[][], gemi
       const res = await client.models.generateContent({
         model: gemini.model,
         contents: `Spreadsheet headers: ${JSON.stringify(headers)}\nSample rows: ${JSON.stringify(sample.slice(0, 5))}\nFor each field (${FIELDS.join(', ')}), return the exact header that holds it, or null. principal = total loan amount; instalment = amount per payment; firstDueDate = first repayment date; instalments = number of payments; paid = amount repaid so far; sector = farming, trade, salaried or other.`,
-        config: { responseMimeType: 'application/json', responseJsonSchema: zodToJsonSchema(MappingSchema, { target: 'openApi3', $refStrategy: 'none' }), temperature: 0 },
+        config: { responseMimeType: 'application/json', responseJsonSchema: schema(MappingSchema), temperature: 0 },
       });
       const parsed = MappingSchema.safeParse(JSON.parse(res.text ?? '{}'));
       if (parsed.success) {
