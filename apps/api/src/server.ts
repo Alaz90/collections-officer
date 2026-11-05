@@ -118,6 +118,7 @@ export function createServer(config: Config, built = buildDeps(config)) {
       ok: true,
       store: config.STORE,
       ai: gemini ? `gemini (${config.GEMINI_MODEL})` : 'templates',
+      aiHealth: deps.ai instanceof GeminiAI ? deps.ai.health : null,
       payments: deps.payments.name,
       channel: telegram ? 'telegram' : 'outbox',
       auth: config.AUTH_MODE,

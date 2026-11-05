@@ -43,6 +43,14 @@ const schema = (s: z.ZodTypeAny) => zodToJsonSchema(s, { target: 'openApi3', $re
  */
 export class GeminiAI implements AI {
   private client: GoogleGenAI;
+  /** Failures are counted and logged, never hidden: the fallback keeps the agent working, the log says why. */
+  readonly health = { calls: 0, failures: 0, lastError: null as string | null };
+
+  private fail(where: string, e: unknown) {
+    this.health.failures++;
+    this.health.lastError = `${where}: ${e instanceof Error ? e.message : String(e)}`.slice(0, 400);
+    console.warn(`[gemini] ${this.health.lastError}`);
+  }
 
   constructor(
     apiKey: string,
@@ -58,9 +66,11 @@ export class GeminiAI implements AI {
         contents: `Facts:\n${JSON.stringify(brief, null, 2)}\n\nWrite the message for the action "${brief.action}".`,
         config: { systemInstruction: WRITER_RULES, temperature: 0.4 },
       });
+      this.health.calls++;
       const text = res.text?.trim();
       return text && text.length > 0 ? text : templateMessage(brief);
-    } catch {
+    } catch (e) {
+      this.fail('writeMessage', e);
       return templateMessage(brief);
     }
   }
@@ -79,10 +89,12 @@ export class GeminiAI implements AI {
             temperature: 0,
           },
         });
+        this.health.calls++;
         const parsed = ReplyReading.safeParse(JSON.parse(res.text ?? '{}'));
         if (parsed.success) return parsed.data;
-      } catch {
-        // retry, then fall back
+        this.fail('readReply', new Error(`invalid JSON shape: ${parsed.error.issues[0]?.message}`));
+      } catch (e) {
+        this.fail('readReply', e);
       }
     }
     const due = Math.round(Number(context.amountDue.replace(/[^\d.]/g, '')) * 100) || 0;
@@ -106,10 +118,12 @@ export class GeminiAI implements AI {
           temperature: 0,
         },
       });
+      this.health.calls++;
       const parsed = ReceiptSchema.safeParse(JSON.parse(res.text ?? '{}'));
       if (parsed.success) return parsed.data;
-    } catch {
-      // fall through
+      this.fail('readReceipt', new Error('invalid JSON shape'));
+    } catch (e) {
+      this.fail('readReceipt', e);
     }
     return { transactionId: null, amountCents: null, date: null, sender: null, receivingAccount: null, provider: null };
   }

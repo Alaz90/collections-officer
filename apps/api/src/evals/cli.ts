@@ -13,7 +13,11 @@ const THRESHOLDS = { intentAccuracy: 0.85, amountAccuracy: 0.85, falsePaid: 0 };
 
 const reports: EvalReport[] = [await runEvals(new TemplateAI(), 'rules')];
 const key = process.env.GEMINI_API_KEY;
-if (key) reports.push(await runEvals(new GeminiAI(key, process.env.GEMINI_MODEL ?? 'gemini-3.8-flash'), 'gemini'));
+const gemini = key ? new GeminiAI(key, process.env.GEMINI_MODEL ?? 'gemini-3.8-flash') : null;
+if (gemini) {
+  reports.push(await runEvals(gemini, 'gemini'));
+  console.log(`gemini calls ok: ${gemini.health.calls}, failures: ${gemini.health.failures}${gemini.health.lastError ? `, last error: ${gemini.health.lastError}` : ''}`);
+}
 
 for (const r of reports) {
   const p = (x: number) => `${Math.round(x * 100)}%`;

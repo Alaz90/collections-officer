@@ -339,8 +339,11 @@ export class CollectionsAgent {
     sentToday: number,
     trace: Trace,
   ): Promise<string> {
+    const nice = (d: string) => (/^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : d);
     const full: MessageBrief = {
       ...brief,
+      dueDate: nice(brief.dueDate),
+      plan: brief.plan?.map((p) => ({ ...p, dueDate: nice(p.dueDate) })),
       borrowerName: borrower.name.split(' ')[0] ?? borrower.name,
       language: borrower.language,
       lenderName: lender.name,
