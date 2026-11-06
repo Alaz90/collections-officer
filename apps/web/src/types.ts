@@ -79,6 +79,7 @@ export interface SandboxResult {
   proposed: { collectionRate: number; defaultRate: number; collectedCents: number };
   deltaCollectedCents: number;
   deltaDefaults: number;
+  clear: boolean;
   affectedBorrowers: number;
   assumptions: string[];
 }

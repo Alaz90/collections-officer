@@ -81,7 +81,7 @@ export function Portfolio() {
 const REGIONS = ['', 'Sidama', 'South Ethiopia', 'Oromia', 'Amhara', 'Addis Ababa'];
 
 export function SandboxResultView({ r, onApply }: { r: SandboxResult; onApply?: () => void }) {
-  const better = r.deltaCollectedCents > 0 || r.deltaDefaults < 0;
+  const better = r.clear && (r.deltaCollectedCents > 0 || r.deltaDefaults < 0);
   return (
     <div className={`notice ${better ? 'ok' : ''}`} style={{ marginTop: 12 }}>
       <p><strong>{r.proposal.name}</strong></p>
@@ -93,9 +93,11 @@ export function SandboxResultView({ r, onApply }: { r: SandboxResult; onApply?: 
           <tr><td>Money collected (your {r.affectedBorrowers} loans)</td><td className="num">{birr(r.current.collectedCents)}</td><td className="num">{birr(r.proposed.collectedCents)}</td></tr>
         </tbody>
       </table>
-      {r.deltaCollectedCents === 0 && r.deltaDefaults === 0 && (
+      {r.deltaCollectedCents === 0 && r.deltaDefaults === 0 ? (
         <p className="small">No difference in simulation: for these borrowers the current rule is not what holds repayment back, so this change would not be worth making.</p>
-      )}
+      ) : !r.clear ? (
+        <p className="small">No clear difference: the simulated runs disagree on which way this change goes, so the gap above is within simulation noise. Not worth changing on this evidence.</p>
+      ) : null}
       <p className="small muted">{r.assumptions.join(' ')}</p>
       {onApply && better && <button className="primary" style={{ marginTop: 8 }} onClick={onApply}>Apply to the playbook</button>}
     </div>

@@ -276,7 +276,7 @@ export function createServer(config: Config, built = buildDeps(config)) {
       const lender = (await deps.store.lenders.get(lenderId)) as Lender;
       const cases = await agent.preview(lenderId);
       const signals = cases.map((c) => c.region).filter((r): r is NonNullable<typeof r> => !!r);
-      res.json(await runSandbox({ lender, cases, signals, proposal, today: today(), seeds: 2 }));
+      res.json(await runSandbox({ lender, cases, signals, proposal, today: today(), seeds: 4 }));
     }),
   );
   app.post(

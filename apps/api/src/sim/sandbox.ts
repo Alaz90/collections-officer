@@ -27,6 +27,8 @@ export interface SandboxResult {
   /** Proposed minus current, scaled back to the real portfolio size. */
   deltaCollectedCents: number;
   deltaDefaults: number;
+  /** True only when every run moved the same way: otherwise the difference is simulation noise. */
+  clear: boolean;
   /** In the affected segment only. */
   affectedBorrowers: number;
   assumptions: string[];
@@ -105,7 +107,8 @@ export async function runSandbox(input: {
   const copies = Math.max(1, Math.ceil((input.borrowers ?? 40) / Math.max(1, open.length)));
   const dryRegions = [...new Set(input.signals.filter((s) => s.ratio < 0.7).map((s) => s.region))];
   const a: Assumptions = { ...SCENARIOS[0]!, name: 'sandbox', dryRegions };
-  const seeds = input.seeds ?? 2;
+  const seeds = input.seeds ?? 4;
+  const perRun: number[] = [];
 
   const proposedSegment: Segment = { name: proposal.name, ...proposal.segment, playbook: proposal.playbook };
   const sum = { cur: { c: 0, d: 0, cents: 0, due: 0 }, pro: { c: 0, d: 0, cents: 0, due: 0 } };
@@ -122,6 +125,7 @@ export async function runSandbox(input: {
     sum.pro.c += pro.collectionRate;
     sum.pro.d += pro.defaultRate;
     sum.pro.cents += pro.collectedCents;
+    perRun.push(pro.collectedCents - cur.collectedCents - (pro.defaultRate - cur.defaultRate) * 1e7);
   }
   const scale = open.length / Math.max(1, simBorrowers);
   const avg = (x: { c: number; d: number; cents: number }) => ({
@@ -139,6 +143,7 @@ export async function runSandbox(input: {
     proposed,
     deltaCollectedCents: proposed.collectedCents - current.collectedCents,
     deltaDefaults: Math.round((proposed.defaultRate - current.defaultRate) * open.length * 10) / 10,
+    clear: perRun.length > 1 && (perRun.every((d) => d > 0) || perRun.every((d) => d < 0)),
     affectedBorrowers: affected,
     assumptions: [
       `Simulated ${simBorrowers} borrowers built from the ${open.length} open loans this policy affects, over ${seeds} run${seeds > 1 ? 's' : ''}.`,

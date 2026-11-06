@@ -174,7 +174,12 @@ export class CollectionsAgent {
       const trace = new Trace();
 
       // Close out plans whose dates have passed.
-      for (const plan of (await this.deps.store.plans.list(lenderId)).filter((p) => p.loanId === loan.id && p.status === 'active')) {
+      // Only the newest active plan counts: an older one was replaced when the newer one rewrote the schedule.
+      const active = (await this.deps.store.plans.list(lenderId))
+        .filter((p) => p.loanId === loan.id && p.status === 'active')
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      for (const old of active.slice(1)) await this.deps.store.plans.put({ ...old, status: 'expired' });
+      for (const plan of active.slice(0, 1)) {
         const status = evaluatePlan(plan, loan, today);
         if (status !== plan.status) {
           await this.deps.store.plans.put({ ...plan, status });
@@ -491,6 +496,10 @@ export class CollectionsAgent {
     const today = this.today();
     const updated = applyPlanToLoan(loan, plan, today);
     await this.deps.store.loans.put(updated);
+    // The new plan rewrites the schedule, so any earlier plan on this loan no longer applies.
+    for (const other of (await this.deps.store.plans.list(lender.id)).filter((p) => p.loanId === loan.id && p.id !== plan.id && ['active', 'offered'].includes(p.status))) {
+      await this.deps.store.plans.put({ ...other, status: 'expired' });
+    }
     await this.deps.store.plans.put({ ...plan, status: 'active' });
     trace.tool('record_promise', { planId: plan.id, instalments: plan.instalments });
     const first = plan.instalments[0]!;
