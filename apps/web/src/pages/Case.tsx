@@ -17,7 +17,7 @@ function Run({ run }: { run: AgentRun }) {
   return (
     <details className="run">
       <summary>
-        <span>{TRIGGER[run.trigger] ?? run.trigger}: {run.outcome}</span>
+        <span>{TRIGGER[run.trigger] ?? run.trigger}: {run.outcome.replaceAll("_", " ")}</span>
         <span className="muted small">{new Date(run.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
       </summary>
       <ul className="trace">
@@ -115,7 +115,7 @@ export function Case() {
                   {new Date(m.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   {m.status === 'pending_approval' && ', waiting for approval'}
                   {m.status === 'blocked' && ', not sent'}
-                  {m.status === 'superseded' && ', replaced by a newer draft'}
+                  {m.status === 'superseded' && ', replaced by a newer message'}
                 </span>
               </div>
             ))}
@@ -155,6 +155,14 @@ export function Case() {
               Save call note
             </button>
             <p className="muted small" style={{ marginTop: 8 }}>Unless you keep it, the case goes back to the agent’s routine follow-up.</p>
+            {borrower.caseSummary.trim() && (
+              <>
+                <h3 style={{ marginTop: 16, fontSize: 14 }}>Case notes</h3>
+                <ul className="small" style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                  {borrower.caseSummary.trim().split('\n').slice(-6).reverse().map((line, i) => <li key={i}>{line}</li>)}
+                </ul>
+              </>
+            )}
           </section>
 
           <section className="sheet">

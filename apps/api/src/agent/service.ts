@@ -44,6 +44,9 @@ class Trace {
   }
 }
 
+/** Outgoing messages that close a step rather than ask a question: silence after them is not a warning sign. */
+const NO_REPLY_EXPECTED = new Set(['thanks', 'plan_confirmation', 'handover_notice']);
+
 export class CollectionsAgent {
   weights: RiskWeights = DEFAULT_WEIGHTS;
 
@@ -106,7 +109,8 @@ export class CollectionsAgent {
     let unanswered = 0;
     for (const m of mine) {
       if (m.direction === 'in') unanswered = 0;
-      else if (m.status === 'sent') unanswered++;
+      // A message only counts as unanswered after a day: borrowers are not expected to reply instantly.
+      else if (m.status === 'sent' && !NO_REPLY_EXPECTED.has(m.action ?? '') && this.deps.clock.now().getTime() - new Date(m.at).getTime() >= 86_400_000) unanswered++;
     }
     const next = nextUnpaid(loan);
     const lastOut = [...mine].reverse().find((m) => m.direction === 'out' && m.status !== 'blocked');
@@ -378,6 +382,7 @@ export class CollectionsAgent {
       lenderId: lender.id,
       borrowerId: borrower.id,
       direction: 'out',
+      action: brief.action,
       channel: borrower.preferredChannel,
       text,
       status,
@@ -591,6 +596,14 @@ export class CollectionsAgent {
     if (problems.length || !loan) {
       if (borrower) {
         await this.sendMessage(lender, borrower, { action: 'receipt_problem', amountDue: '', dueDate: '', reason: `${problems.join('; ')}. Do not mention a due date.` }, 0, trace);
+      }
+      if (loan && loan.status !== 'handed_over') {
+        // The officer must see it: put the case on their call list with the reason.
+        await this.deps.store.loans.put({ ...loan, status: 'handed_over' });
+        if (borrower) {
+          const note = `${this.today()}: receipt could not be confirmed (${problems.join('; ')})`;
+          await this.deps.store.borrowers.put({ ...borrower, caseSummary: `${borrower.caseSummary}\n${note}`.trim().split('\n').slice(-8).join('\n') });
+        }
       }
       const run = await this.record({ lenderId, borrowerId, trigger: 'receipt', steps: trace.steps, outcome: 'receipt sent to officer' });
       return { ...run, fields, problems };

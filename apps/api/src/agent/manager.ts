@@ -120,7 +120,8 @@ class Tools {
           .filter((c) => !args.sector || c.borrower.sector === args.sector)
           .filter((c) => !args.riskLevel || c.risk.level === args.riskLevel)
           .filter((c) => !args.lateOnly || c.loan.status === 'late' || c.loan.status === 'handed_over')
-          .map((c) => ({ name: c.borrower.name, region: c.borrower.region, sector: c.borrower.sector, risk: c.risk, nextAction: c.decision.action, status: c.loan.status }));
+          .sort((a, b) => b.decision.expectedAtRiskCents - a.decision.expectedAtRiskCents)
+          .map((c) => ({ name: c.borrower.name, region: c.borrower.region, sector: c.borrower.sector, risk: c.risk, nextAction: c.decision.action, status: c.loan.status, atStakeCents: c.decision.expectedAtRiskCents }));
         this.steps.push({ tool: name, input: args, summary: `${rows.length} matching loans` });
         return inBirr(rows.slice(0, 25));
       }
@@ -212,9 +213,9 @@ async function fallbackPlanner(ctx: Ctx, tools: Tools, question: string): Promis
   const sector = /farm|harvest|crop/.test(q) ? 'farming' : /shop|trade|trader/.test(q) ? 'trade' : undefined;
 
   if (/call|who should/.test(q)) {
-    const rows = (await tools.call('find_loans', { lateOnly: true })) as Array<{ name: string; risk: { reasons: string[] } }>;
+    const rows = (await tools.call('find_loans', { lateOnly: true })) as Array<{ name: string; risk: { reasons: string[] }; atStakeBirr: number }>;
     return rows.length
-      ? `Start with ${rows.slice(0, 3).map((r) => `${r.name} (${r.risk.reasons[0]})`).join(', ')}. The call list on the Today page is ranked by the amount at stake.`
+      ? `Start with ${rows.slice(0, 3).map((r) => `${r.name} (${formatBirr(Math.round(r.atStakeBirr / 100) * 10000)} at stake; ${r.risk.reasons[0]})`).join(', ')}. They are ranked by the amount at stake, like the call list on the Today page.`
       : 'No one needs a call today.';
   }
   if (!region && !sector) {

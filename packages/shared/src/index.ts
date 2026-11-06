@@ -164,6 +164,8 @@ export const Message = z.object({
   channel: Channel,
   text: z.string(),
   intent: Intent.optional(),
+  /** What an outgoing message was for (remind, thanks, …); confirmations and thank-yous expect no reply. */
+  action: z.string().optional(),
   status: z.enum(['sent', 'pending_approval', 'blocked', 'received', 'superseded']),
   at: z.string(),
 });

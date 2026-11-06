@@ -219,3 +219,4 @@ td.num, th.num { text-align: right; }
   .steps li { grid-template-columns: 1fr; }
 }
 
+input:disabled, select:disabled { background: transparent; color: var(--ink-2); border-style: dashed; cursor: default; }

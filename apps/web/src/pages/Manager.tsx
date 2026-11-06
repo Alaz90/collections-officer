@@ -339,6 +339,7 @@ export function Setup({ role }: { role: string }) {
       <div className="cols-2">
         <section className="sheet">
           <h2 style={{ marginBottom: 12 }}>Playbook</h2>
+          {!manager && <p className="muted small" style={{ marginBottom: 12 }}>Only a manager can change the playbook or import loans.</p>}
           {playbook && (
             <>
               <div className="grid-form">
@@ -369,7 +370,7 @@ export function Setup({ role }: { role: string }) {
             </>
           )}
         </section>
-        <section className="sheet">
+        {manager && <section className="sheet">
           <h2 style={{ marginBottom: 4 }}>Import a loan book</h2>
           <p className="muted small" style={{ marginBottom: 12 }}>Paste your spreadsheet as CSV (File → Download → CSV). Column names do not need to match: the agent works out which column is which, and you confirm.</p>
           <textarea value={csv} onChange={(e) => setCsv(e.target.value)} placeholder={'Client,Phone,Kebele,Business,Loan amount,Monthly,First due,Months\nAlmaz T.,0911223344,Sidama,coffee farming,8000,2000,2026-12-01,4'} style={{ minHeight: 140 }} />
@@ -402,7 +403,7 @@ export function Setup({ role }: { role: string }) {
               {imported && <p className="notice ok" style={{ marginTop: 8 }}>{imported}</p>}
             </div>
           )}
-        </section>
+        </section>}
       </div>
     </>
   );
