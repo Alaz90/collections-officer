@@ -37,7 +37,6 @@ body {
   background: var(--paper);
   color: var(--ink);
   font: 400 15px/1.5 var(--font);
-  font-feature-settings: 'tnum' 1;
   -webkit-font-smoothing: antialiased;
 }
 h1, h2, h3 { margin: 0; line-height: 1.2; letter-spacing: -0.01em; }
@@ -219,3 +218,6 @@ td.num, th.num { text-align: right; }
   .figures > div:nth-child(n + 3) { border-top: 1px solid var(--line-2); }
   .steps li { grid-template-columns: 1fr; }
 }
+
+/* Tabular figures only where numbers line up in columns: in this font 'tnum' also widens commas and full stops, which spaced out ordinary text. */
+.figures .v, .amount, td.num { font-variant-numeric: tabular-nums; }
