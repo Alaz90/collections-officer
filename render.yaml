@@ -5,7 +5,7 @@ services:
     runtime: node
     plan: free
     buildCommand: npm ci --include=dev && npm run build -w packages/shared && npm run build -w apps/api && VITE_AUTH_MODE=firebase npm run build -w apps/web
-    startCommand: node apps/api/dist/server.js
+    startCommand: node --max-old-space-size=400 apps/api/dist/server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION

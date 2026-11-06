@@ -93,13 +93,16 @@ export async function runSandbox(input: {
   proposal: PolicyProposal;
   today: string;
   seeds?: number;
+  /** Simulated borrowers per run and days simulated. Kept small so a test fits a free server (one shared CPU, 512 MB). */
+  borrowers?: number;
+  days?: number;
 }): Promise<SandboxResult> {
   const { lender, cases, proposal } = input;
   // Only the borrowers the policy touches are simulated; the rest of the book is unaffected.
   const inSegment = (c: (typeof cases)[number]) =>
     (!proposal.segment?.region || c.borrower.region === proposal.segment.region) && (!proposal.segment?.sector || c.borrower.sector === proposal.segment.sector);
   const open = cases.filter((c) => c.loan.status !== 'closed' && inSegment(c));
-  const copies = Math.max(1, Math.ceil(100 / Math.max(1, open.length)));
+  const copies = Math.max(1, Math.ceil((input.borrowers ?? 40) / Math.max(1, open.length)));
   const dryRegions = input.signals.filter((s) => s.ratio < 0.7).map((s) => s.region);
   const a: Assumptions = { ...SCENARIOS[0]!, name: 'sandbox', dryRegions };
   const seeds = input.seeds ?? 2;
@@ -110,7 +113,7 @@ export async function runSandbox(input: {
   for (let s = 1; s <= seeds; s++) {
     const world = copyOfPortfolio(open, copies, s, input.today);
     simBorrowers = world.length;
-    const opts = { playbook: lender.playbook, segments: lender.segments, days: 120 };
+    const opts = { playbook: lender.playbook, segments: lender.segments, days: input.days ?? 90 };
     const cur = await runAgent(a, world.length, s, { ...opts, world: structuredClone(world) });
     const pro = await runAgent(a, world.length, s, { ...opts, segments: [...(lender.segments ?? []), proposedSegment], world: structuredClone(world) });
     sum.cur.c += cur.collectionRate;

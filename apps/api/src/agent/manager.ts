@@ -110,6 +110,8 @@ class Tools {
         return rows.slice(0, 25);
       }
       case 'test_policy': {
+        // Each test is a full simulation; three per question keeps an answer inside a free server's CPU and memory.
+        if (this.tests.length >= 3) return { error: 'limit of 3 policy tests per question reached; recommend from the tests already run' };
         const proposal = toProposal(args);
         const result = await this.runTest(proposal);
         this.steps.push({
