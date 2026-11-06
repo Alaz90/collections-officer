@@ -7,7 +7,7 @@ import { Playbook } from '@co/shared';
 import { z } from 'zod';
 import { askManagerAgent } from './agent/manager.js';
 import { CollectionsAgent } from './agent/service.js';
-import { OutboxChannel, TelegramChannel } from './adapters/channels.js';
+import { DemoFallbackChannel, OutboxChannel, TelegramChannel } from './adapters/channels.js';
 import { cachedStore } from './adapters/cached.js';
 import { firebaseApp, firestoreStore } from './adapters/firestore.js';
 import { GeminiAI } from './adapters/gemini.js';
@@ -41,7 +41,8 @@ export function buildDeps(config: Config) {
   const outbox = new OutboxChannel();
   const live = config.WEATHER === 'open-meteo' ? new OpenMeteoWeather() : new FixedWeather({});
   const weather = new DemoOverrideWeather(live, DEMO_RAINFALL);
-  const deps: Deps = { store, ai, payments, channel: telegram ?? outbox, weather, clock: { now: () => new Date() }, ids: uuid };
+  const channel = telegram ? (config.SEED_DEMO === 'true' ? new DemoFallbackChannel(telegram, outbox) : telegram) : outbox;
+  const deps: Deps = { store, ai, payments, channel, weather, clock: { now: () => new Date() }, ids: uuid };
   return { deps, app, fake, telegram, outbox };
 }
 

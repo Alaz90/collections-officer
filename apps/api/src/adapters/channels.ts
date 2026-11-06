@@ -40,3 +40,19 @@ export class OutboxChannel implements MessageChannel {
     return { delivered: true };
   }
 }
+
+/**
+ * Demo only: Telegram for borrowers who connected a phone, the outbox for
+ * invented borrowers who have none, so a demo can play them from the
+ * dashboard. In production every borrower goes through the real channel.
+ */
+export class DemoFallbackChannel implements MessageChannel {
+  constructor(
+    private real: MessageChannel,
+    private outbox: OutboxChannel,
+  ) {}
+
+  async send(borrower: Borrower, text: string) {
+    return borrower.telegramChatId ? this.real.send(borrower, text) : this.outbox.send(borrower, text);
+  }
+}

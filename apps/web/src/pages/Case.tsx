@@ -115,6 +115,7 @@ export function Case() {
                   {new Date(m.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                   {m.status === 'pending_approval' && ', waiting for approval'}
                   {m.status === 'blocked' && ', not sent'}
+                  {m.status === 'sent' && m.direction === 'out' && !borrower.telegramChatId && ', to the demo inbox (no phone connected)'}
                   {m.status === 'superseded' && ', replaced by a newer message'}
                 </span>
               </div>
