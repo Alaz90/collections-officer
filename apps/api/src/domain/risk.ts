@@ -75,7 +75,7 @@ function contributions(s: RiskSignals, w: RiskWeights): Array<{ key: keyof RiskS
 function reasonFor(key: keyof RiskSignals, s: RiskSignals): string {
   switch (key) {
     case 'daysPastDue':
-      return `${s.daysPastDue} days past due`;
+      return `${s.daysPastDue} ${s.daysPastDue === 1 ? 'day' : 'days'} past due`;
     case 'lateShare':
       return `${Math.round(s.lateShare * 100)}% of past payments were late`;
     case 'lastWasPartial':

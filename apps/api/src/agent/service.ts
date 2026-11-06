@@ -559,13 +559,27 @@ export class CollectionsAgent {
     const trace = new Trace();
     const fields = await this.deps.ai.readReceipt(image);
     trace.tool('read_receipt', fields);
+    const sender = await this.deps.store.borrowers.get(borrowerId);
+    if (sender) {
+      // A receipt photo is a reply: record it so the case shows it and it is not counted as silence.
+      await this.deps.store.messages.put({
+        id: this.deps.ids(),
+        lenderId,
+        borrowerId,
+        direction: 'in',
+        channel: sender.preferredChannel,
+        text: `[Receipt photo] ${fields.amountCents ? formatBirr(fields.amountCents) : 'amount unreadable'}${fields.transactionId ? `, transaction ${fields.transactionId}` : ''}`,
+        status: 'received',
+        at: this.deps.clock.now().toISOString(),
+      });
+    }
     const loan = (await this.deps.store.loans.list(lenderId)).find((l) => l.borrowerId === borrowerId && l.status !== 'closed');
     const problems = await this.receiptProblems(lender, loan, fields);
     trace.policy(problems.length ? `receipt flagged: ${problems.join('; ')}` : 'receipt passed checks', problems);
     const borrower = await this.deps.store.borrowers.get(borrowerId);
     if (problems.length || !loan) {
       if (borrower) {
-        await this.sendMessage(lender, borrower, { action: 'receipt_problem', amountDue: '', dueDate: this.today(), reason: problems.join('; ') }, 0, trace);
+        await this.sendMessage(lender, borrower, { action: 'receipt_problem', amountDue: '', dueDate: '', reason: `${problems.join('; ')}. Do not mention a due date.` }, 0, trace);
       }
       const run = await this.record({ lenderId, borrowerId, trigger: 'receipt', steps: trace.steps, outcome: 'receipt sent to officer' });
       return { ...run, fields, problems };

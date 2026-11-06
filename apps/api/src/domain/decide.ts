@@ -66,7 +66,7 @@ export function decide(input: DecisionInput): Decision {
     // Space follow-ups: no more than one every other day while waiting for a reply.
     if (input.daysSinceLastContact !== null && input.daysSinceLastContact < 2) return out('wait', 'contacted recently');
     if (input.activePlan) return out('remind', 'plan payment is late');
-    return out('negotiate', `${dpd} days past due`);
+    return out('negotiate', `${dpd} ${dpd === 1 ? 'day' : 'days'} past due`);
   }
 
   // Not late yet: prevention. A reminder on the due date itself is still sent.
