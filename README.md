@@ -57,12 +57,15 @@ flowchart TB
   C[Chapa<br/>payment webhooks] <--> B
   D[React dashboard<br/>officers, managers] <--> B
   subgraph B[Node.js backend]
-    L[Risk and next best action] --> A[Agent loop<br/>Gemini function calls] --> P[Policy layer<br/>playbook, limits, realism check] --> X[Tools<br/>messages, links, plans, receipts, simulator]
+    L[Risk score and next best action<br/>rules in code] --> P[Policy layer<br/>playbook, limits, realism check] --> X[Tools<br/>messages, links, plans, receipts, simulator]
+    M[Manager agent<br/>Gemini function calls] --> X
   end
   B <--> G[Gemini API]
   B <--> F[(Firestore)]
   W[Open-Meteo<br/>rainfall] --> B
 ```
+
+**Where Gemini is used:** it writes every borrower message, reads borrower replies (English, Amharic or mixed) into checked JSON, reads receipt photos, maps spreadsheet columns on import, and runs the manager's agent, which calls tools in a loop (portfolio, find loans, test a policy, draft a change) to answer questions in plain language. Decisions about money (which action, how much, by when, whether a plan is allowed, whether a payment is real) are made by rules in code, so they are tested, explainable, and cannot be talked round by a borrower.
 
 **Every morning** the agent syncs the book, reads rainfall for regions with farming loans, scores every loan with plain reasons, picks an action per borrower (wait, remind, check in early, offer a schedule change, negotiate, or hand over), checks it against the playbook, and acts. Between runs it reacts to every reply, payment and receipt.
 
@@ -121,6 +124,21 @@ Secrets are set in Render and GitHub, never in the repository: `GEMINI_API_KEY`,
 - The risk weights start hand-set. `fitWeights` refits them to a lender's own outcomes once there is history.
 - Rainfall for Sidama and South Ethiopia uses labelled demo values so the dry-season story shows whatever the real season is; other regions use live Open-Meteo data.
 - Telegram is the only borrower channel in this build; Chapa runs in test mode.
+
+## Design and build
+
+The [solution design](docs/solution-design.pdf) is the product vision; this build is its working core. Where they differ:
+
+| Design | This build | Why |
+|---|---|---|
+| Gemini chooses each borrower's action through function calls | Rules in code choose the action; Gemini handles language, images and the manager's multi-step requests | Money decisions stay deterministic and testable |
+| Cloud Run, Cloud Scheduler, Secret Manager, Firebase Hosting | Render, GitHub Actions schedule, environment variables | Google Cloud billing needs a card that was not available |
+| Google Sheets API import | Paste the sheet as CSV; Gemini maps the columns | Simpler, same result |
+| Weekly report emailed every Monday | Weekly report on the Agent performance page | No email service connected |
+| Gemini plays borrowers in the simulator | Code-driven borrowers with hidden personas | A stress test would need thousands of Gemini calls on the free tier |
+| Calendar follow-ups, Gmail briefings, email channel, near-copy receipt detection | Not built (reused transaction numbers are caught) | Roadmap |
+
+Also not yet built: a promise an officer records after a call does not become a plan, and a reply like "tomorrow" can be read as "now".
 
 ## Roadmap
 
