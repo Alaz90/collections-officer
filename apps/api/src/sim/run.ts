@@ -210,6 +210,9 @@ export async function runAgent(a: Assumptions, n: number, seed: number, opts: Ru
   };
 
   for (let d = 0; d < (opts.days ?? SIM_DAYS); d++) {
+    // Give the event loop a turn each simulated day, so a simulation running on
+    // the server never blocks health checks, webhooks or other requests.
+    await new Promise<void>((resolve) => setImmediate(resolve));
     const day = addDays(SIM_START, d);
     clock.set(`${day}T07:00:00Z`);
     wallets.advance(day);
