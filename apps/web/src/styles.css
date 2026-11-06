@@ -219,5 +219,3 @@ td.num, th.num { text-align: right; }
   .steps li { grid-template-columns: 1fr; }
 }
 
-/* Tabular figures only where numbers line up in columns: in this font 'tnum' also widens commas and full stops, which spaced out ordinary text. */
-.figures .v, .amount, td.num { font-variant-numeric: tabular-nums; }
