@@ -18,6 +18,10 @@ class FirestoreCollection<T extends { id: string }> implements Collection<T> {
     await this.db.collection(this.name).doc(item.id).set(JSON.parse(JSON.stringify(item)));
   }
 
+  async remove(id: string) {
+    await this.db.collection(this.name).doc(id).delete();
+  }
+
   async list(lenderId: string) {
     const snap =
       this.name === 'lenders'

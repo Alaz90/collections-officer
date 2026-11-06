@@ -37,6 +37,7 @@ export interface Collection<T extends { id: string }> {
   get(id: string): Promise<T | undefined>;
   put(item: T): Promise<void>;
   list(lenderId: string): Promise<T[]>;
+  remove(id: string): Promise<void>;
 }
 
 export interface Store {

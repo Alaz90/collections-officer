@@ -18,7 +18,7 @@ import { DemoOverrideWeather, FixedWeather, OpenMeteoWeather } from './adapters/
 import { loadConfig, type Config } from './config.js';
 import { toIsoDate } from './domain/dates.js';
 import { convert, parseCsv, suggestMapping, type Mapping } from './importer.js';
-import type { Deps, Lender, Segment } from './ports.js';
+import type { Collection, Deps, Lender, Segment } from './ports.js';
 import { DEMO_RAINFALL, seedDemo } from './seed.js';
 import { runSandbox, type PolicyProposal } from './sim/sandbox.js';
 import { portfolioView, todayView, weeklyReport } from './views.js';
@@ -350,8 +350,18 @@ export function createServer(config: Config, built = buildDeps(config)) {
     '/api/demo/reset',
     manager,
     wrap(async (_req, res) => {
-      if (config.STORE !== 'memory') return res.status(400).json({ error: 'reset only works with the memory store' });
-      res.json({ ok: false, note: 'restart the server to reset the memory store' });
+      // Back to the fresh demo book, for recording a demo. Telegram links are kept so phones stay connected.
+      const links = new Map((await deps.store.borrowers.list(lenderId)).filter((b) => b.telegramChatId).map((b) => [b.id, b.telegramChatId!]));
+      for (const name of ['borrowers', 'loans', 'payments', 'plans', 'messages', 'runs', 'signals'] as const) {
+        const col = deps.store[name] as Collection<{ id: string }>;
+        for (const item of await col.list(lenderId)) await col.remove(item.id);
+      }
+      await seedDemo(deps.store, lenderId, today());
+      for (const [id, chat] of links) {
+        const b = await deps.store.borrowers.get(id);
+        if (b) await deps.store.borrowers.put({ ...b, telegramChatId: chat, preferredChannel: 'telegram' });
+      }
+      res.json({ ok: true, keptTelegramLinks: links.size });
     }),
   );
 

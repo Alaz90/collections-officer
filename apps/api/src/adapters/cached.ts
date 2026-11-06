@@ -36,6 +36,11 @@ class CachedCollection<T extends { id: string; lenderId?: string }> implements C
     await this.inner.put(item);
   }
 
+  async remove(id: string) {
+    this.items.delete(id);
+    await this.inner.remove(id);
+  }
+
   async list(lenderId: string) {
     await this.ensure(lenderId);
     const out: T[] = [];

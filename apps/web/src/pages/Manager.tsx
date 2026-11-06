@@ -318,6 +318,7 @@ export function Setup({ role }: { role: string }) {
   const lender = useApi<{ playbook: Playbook; segments?: Array<{ name: string }> }>('/api/playbook');
   const [pb, setPb] = useState<Playbook | null>(null);
   const [saved, setSaved] = useState(false);
+  const [resetStep, setResetStep] = useState<'idle' | 'confirm' | 'busy' | 'done'>('idle');
   const [csv, setCsv] = useState('');
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [imported, setImported] = useState<string | null>(null);
@@ -366,6 +367,24 @@ export function Setup({ role }: { role: string }) {
               {saved && <p className="notice ok" style={{ marginTop: 8 }}>Saved. The agent uses it from the next cycle.</p>}
               {!!lender.data?.segments?.length && (
                 <p className="muted small" style={{ marginTop: 12 }}>Group policies in use: {lender.data.segments.map((s) => s.name).join('; ')}.</p>
+              )}
+              {manager && (
+                <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--line-2)' }}>
+                  <p className="muted small">Demo only: put the loan book back to the fresh demo data. Connected Telegram chats stay connected.</p>
+                  <button
+                    style={{ marginTop: 8 }}
+                    disabled={resetStep === 'busy'}
+                    onClick={async () => {
+                      if (resetStep !== 'confirm') return setResetStep('confirm');
+                      setResetStep('busy');
+                      await api('/api/demo/reset', { method: 'POST', body: {} });
+                      setResetStep('done');
+                      window.location.reload();
+                    }}
+                  >
+                    {resetStep === 'confirm' ? 'Click again to reset all demo data' : resetStep === 'busy' ? 'Resetting…' : 'Reset demo data'}
+                  </button>
+                </div>
               )}
             </>
           )}
