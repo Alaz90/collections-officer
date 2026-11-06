@@ -35,7 +35,7 @@ export async function todayView(store: Store, agent: CollectionsAgent, lenderId:
     .sort((a, b) => b.decision.expectedAtRiskCents - a.decision.expectedAtRiskCents)
     .map(row);
   const rising = cases
-    .filter((c) => daysPastDue(c.loan, today) === 0 && c.risk.level !== 'low')
+    .filter((c) => daysPastDue(c.loan, today) === 0 && c.risk.level !== 'low' && c.loan.status !== 'handed_over' && c.decision.action !== 'hand_over')
     .sort((a, b) => b.risk.missProbability - a.risk.missProbability)
     .map(row);
 

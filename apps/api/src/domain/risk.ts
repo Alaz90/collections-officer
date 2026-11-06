@@ -83,7 +83,7 @@ function reasonFor(key: keyof RiskSignals, s: RiskSignals): string {
     case 'brokenPlans':
       return `${s.brokenPlans} broken plan${s.brokenPlans === 1 ? '' : 's'}`;
     case 'unansweredMessages':
-      return `${s.unansweredMessages} messages without a reply`;
+      return `${s.unansweredMessages} ${s.unansweredMessages === 1 ? 'message' : 'messages'} without a reply`;
     case 'activePlan':
       return 'already on a payment plan';
     case 'rainfallRatio':
