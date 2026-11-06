@@ -1,10 +1,14 @@
 name: Daily collections cycle
 
 # Plays the role of Cloud Scheduler: starts the agent's morning run.
-# 05:00 UTC is 08:00 in Addis Ababa.
+# 05:17 UTC is 08:17 in Addis Ababa, just after contact hours open. GitHub
+# delays or drops scheduled runs at busy times (especially on the hour), so a
+# second run at 08:47 UTC (11:47 Addis) is a backup. Running twice is safe: the
+# server holds a lock and the one-message-a-day rule stops repeat messages.
 on:
   schedule:
-    - cron: '0 5 * * *'
+    - cron: '17 5 * * *'
+    - cron: '47 8 * * *'
   workflow_dispatch:
 
 jobs:
