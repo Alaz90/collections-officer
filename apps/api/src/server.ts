@@ -191,8 +191,17 @@ export function createServer(config: Config, built = buildDeps(config)) {
       ]);
       const name = new Map(borrowers.map((b) => [b.id, b.name]));
       const loanOwner = new Map(loans.map((l) => [l.id, l.borrowerId]));
+      // Only the newest waiting draft per borrower is shown; older ones (from before drafts replaced each other) are retired.
+      const newest = new Map<string, (typeof messages)[number]>();
+      for (const m of messages.filter((x) => x.status === 'pending_approval')) {
+        const cur = newest.get(m.borrowerId);
+        if (!cur || m.at > cur.at) newest.set(m.borrowerId, m);
+      }
+      for (const m of messages) {
+        if (m.status === 'pending_approval' && newest.get(m.borrowerId)?.id !== m.id) await deps.store.messages.put({ ...m, status: 'superseded' });
+      }
       res.json({
-        messages: messages.filter((m) => m.status === 'pending_approval').map((m) => ({ ...m, borrowerName: name.get(m.borrowerId) })),
+        messages: [...newest.values()].map((m) => ({ ...m, borrowerName: name.get(m.borrowerId) })),
         plans: plans
           .filter((p) => p.status === 'pending_approval')
           .map((p) => ({ ...p, borrowerId: loanOwner.get(p.loanId), borrowerName: name.get(loanOwner.get(p.loanId) ?? '') })),

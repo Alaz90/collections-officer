@@ -149,6 +149,17 @@ describe('collections agent', () => {
     expect(m!.status).toBe('sent');
   });
 
+  it('a newer draft replaces the one still waiting, so approving never sends two', async () => {
+    const strict = setup({ ...LENDER, playbook: playbook({ autonomy: 'approve_all' }) });
+    await strict.deps.store.lenders.put(strict.lender);
+    await strict.deps.store.borrowers.put(borrower({ sector: 'trade' }));
+    await strict.deps.store.loans.put(loan());
+    await strict.agent.dailyCycle('l1');
+    await strict.agent.handleReply('l1', 'b1', 'I can only pay 200 now');
+    const waiting = (await strict.deps.store.messages.list('l1')).filter((m) => m.status === 'pending_approval');
+    expect(waiting).toHaveLength(1);
+  });
+
   it('never messages outside contact hours', async () => {
     s.clock.set('2026-11-10T19:00:00Z'); // 22:00 local
     await s.deps.store.borrowers.put(borrower({ sector: 'trade' }));

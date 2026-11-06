@@ -366,6 +366,8 @@ export class CollectionsAgent {
     else if (contact.verdict === 'deny') status = 'blocked';
     else status = (await this.deps.channel.send(borrower, text)).delivered ? 'sent' : 'blocked';
 
+    // A newer message replaces any draft still waiting for this borrower, so approving never sends two.
+    if (status === 'pending_approval' || status === 'sent') await this.supersedeDrafts(lender.id, borrower.id);
     await this.deps.store.messages.put({
       id: this.deps.ids(),
       lenderId: lender.id,
@@ -640,6 +642,14 @@ export class CollectionsAgent {
   // -------------------------------------------------------------------------
   // Human approval
 
+  /** Marks every draft still waiting for this borrower as replaced. */
+  async supersedeDrafts(lenderId: string, borrowerId: string, keepId?: string) {
+    const waiting = (await this.deps.store.messages.list(lenderId)).filter(
+      (m) => m.borrowerId === borrowerId && m.status === 'pending_approval' && m.id !== keepId,
+    );
+    for (const m of waiting) await this.deps.store.messages.put({ ...m, status: 'superseded' });
+  }
+
   async approveMessage(lenderId: string, messageId: string, editedText?: string) {
     const lender = await this.lender(lenderId);
     const m = await this.deps.store.messages.get(messageId);
@@ -652,6 +662,7 @@ export class CollectionsAgent {
     if (contact.verdict === 'deny') throw new Error(contact.reasons.join('; '));
     const delivered = (await this.deps.channel.send(borrower, text)).delivered;
     await this.deps.store.messages.put({ ...m, text, status: delivered ? 'sent' : 'blocked', at: this.deps.clock.now().toISOString() });
+    await this.supersedeDrafts(lenderId, m.borrowerId, m.id);
     return delivered;
   }
 

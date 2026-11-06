@@ -164,7 +164,7 @@ export const Message = z.object({
   channel: Channel,
   text: z.string(),
   intent: Intent.optional(),
-  status: z.enum(['sent', 'pending_approval', 'blocked', 'received']),
+  status: z.enum(['sent', 'pending_approval', 'blocked', 'received', 'superseded']),
   at: z.string(),
 });
 export type Message = z.infer<typeof Message>;
