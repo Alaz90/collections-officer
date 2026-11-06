@@ -63,7 +63,22 @@ const TOOLS: FunctionDeclaration[] = [
 
 const SYSTEM = `You advise the manager of a small lender on collections. Use the tools to look at the loan book and to test options before recommending anything.
 For a question about a group of borrowers: find the affected loans, test two or three policies with test_policy, compare their effect on money collected and loans going bad, then draft the best one with draft_policy_change.
-Be concise: three to five sentences, with the numbers from the tools. Never invent numbers. Say that the manager must approve any change.`;
+Be concise: three to five sentences, with the numbers from the tools. Never invent numbers. Say that the manager must approve any change.
+All money from the tools is in birr (fields ending in Birr). Write plain sentences: no Markdown, no asterisks. Give loans going bad as percentages.`;
+
+
+/** The model reads money in birr, never cents: rename every *Cents field to *Birr (whole birr). */
+function inBirr(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(inBirr);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).map(([k, x]) =>
+        k.endsWith('Cents') && typeof x === 'number' ? [k.replace(/Cents$/, 'Birr'), Math.round(x / 100)] : [k, inBirr(x)],
+      ),
+    );
+  }
+  return v;
+}
 
 function toProposal(args: Record<string, unknown>): PolicyProposal {
   const playbook: Partial<Playbook> = {};
@@ -96,7 +111,7 @@ class Tools {
       case 'portfolio_summary': {
         const p = await portfolioView(this.ctx.store, this.ctx.agent, this.ctx.lenderId, this.ctx.today);
         this.steps.push({ tool: name, input: args, summary: `${p.loans} loans, ${Math.round(p.par30 * 100)}% of the book more than 30 days late` });
-        return { ...p, segments: p.segments.slice(0, 6) };
+        return inBirr({ ...p, segments: p.segments.slice(0, 6) });
       }
       case 'find_loans': {
         const cases = await this.ctx.agent.preview(this.ctx.lenderId);
@@ -107,7 +122,7 @@ class Tools {
           .filter((c) => !args.lateOnly || c.loan.status === 'late' || c.loan.status === 'handed_over')
           .map((c) => ({ name: c.borrower.name, region: c.borrower.region, sector: c.borrower.sector, risk: c.risk, nextAction: c.decision.action, status: c.loan.status }));
         this.steps.push({ tool: name, input: args, summary: `${rows.length} matching loans` });
-        return rows.slice(0, 25);
+        return inBirr(rows.slice(0, 25));
       }
       case 'test_policy': {
         // Each test is a full simulation; three per question keeps an answer inside a free server's CPU and memory.
@@ -117,7 +132,7 @@ class Tools {
         this.steps.push({
           tool: name,
           input: args,
-          summary: `${proposal.name}: ${result.deltaCollectedCents >= 0 ? '+' : ''}${formatBirr(result.deltaCollectedCents)} collected, ${result.deltaDefaults > 0 ? '+' : ''}${result.deltaDefaults} loans going bad`,
+          summary: `${proposal.name}: ${result.deltaCollectedCents >= 0 ? '+' : ''}${formatBirr(Math.round(result.deltaCollectedCents / 100) * 100)} collected; loans going bad ${Math.round(result.current.defaultRate * 100)}% → ${Math.round(result.proposed.defaultRate * 100)}%`,
         });
         return {
           name: proposal.name,
@@ -215,7 +230,7 @@ async function fallbackPlanner(ctx: Ctx, tools: Tools, question: string): Promis
     { name: `${label}: lower first payment (20%)`, ...scope, minFirstPaymentShare: 0.2 },
     { name: `${label}: remind 7 days ahead`, ...scope, remindDaysBefore: 7 },
   ];
-  const results: Array<{ name: string; extraCollectedBirr: number; changeInLoansGoingBad: number }> = [];
+  const results: Array<{ name: string; extraCollectedBirr: number; changeInLoansGoingBad: number; defaultRate: { current: number; proposed: number } }> = [];
   for (const o of options) results.push((await tools.call('test_policy', o)) as (typeof results)[number]);
   const best = [...results].sort((a, b) => b.extraCollectedBirr - b.changeInLoansGoingBad * 500 - (a.extraCollectedBirr - a.changeInLoansGoingBad * 500))[0]!;
   const bestOption = options[results.indexOf(best)]!;
@@ -223,5 +238,5 @@ async function fallbackPlanner(ctx: Ctx, tools: Tools, question: string): Promis
     return `I tested ${options.length} options for ${label.toLowerCase()}; none improved on the current policy in simulation, so I recommend keeping it and following up individually.`;
   }
   await tools.call('draft_policy_change', bestOption);
-  return `I tested ${options.length} options for ${label.toLowerCase()} on a simulated copy of your loan book. The best is "${best.name}": about ${formatBirr(best.extraCollectedBirr * 100)} more collected and ${Math.abs(best.changeInLoansGoingBad)} ${best.changeInLoansGoingBad <= 0 ? 'fewer' : 'more'} loans going bad than today’s policy. I have drafted it for your approval; nothing changes until you approve it.`;
+  return `I tested ${options.length} options for ${label.toLowerCase()} on a simulated copy of your loan book. The best is "${best.name}": about ${formatBirr(best.extraCollectedBirr * 100)} more collected, with loans going bad at ${Math.round(best.defaultRate.proposed * 100)}% instead of ${Math.round(best.defaultRate.current * 100)}% under today’s policy. I have drafted it for your approval; nothing changes until you approve it.`;
 }

@@ -103,7 +103,7 @@ export async function runSandbox(input: {
     (!proposal.segment?.region || c.borrower.region === proposal.segment.region) && (!proposal.segment?.sector || c.borrower.sector === proposal.segment.sector);
   const open = cases.filter((c) => c.loan.status !== 'closed' && inSegment(c));
   const copies = Math.max(1, Math.ceil((input.borrowers ?? 40) / Math.max(1, open.length)));
-  const dryRegions = input.signals.filter((s) => s.ratio < 0.7).map((s) => s.region);
+  const dryRegions = [...new Set(input.signals.filter((s) => s.ratio < 0.7).map((s) => s.region))];
   const a: Assumptions = { ...SCENARIOS[0]!, name: 'sandbox', dryRegions };
   const seeds = input.seeds ?? 2;
 
@@ -127,7 +127,7 @@ export async function runSandbox(input: {
   const avg = (x: { c: number; d: number; cents: number }) => ({
     collectionRate: round(x.c / seeds),
     defaultRate: round(x.d / seeds),
-    collectedCents: Math.round((x.cents / seeds) * scale),
+    collectedCents: Math.round(((x.cents / seeds) * scale) / 100) * 100, // whole birr: a simulation is not precise to the cent
   });
   const current = avg(sum.cur);
   const proposed = avg(sum.pro);

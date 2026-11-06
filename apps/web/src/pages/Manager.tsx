@@ -204,7 +204,7 @@ export function Ask() {
         <div className="cols" style={{ marginTop: 16 }}>
           <section className="sheet">
             <h2 style={{ marginBottom: 8 }}>Recommendation</h2>
-            <p>{a.answer}</p>
+            <p>{a.answer.split(/\*\*(.+?)\*\*/g).map((part, i) => (i % 2 ? <strong key={i}>{part}</strong> : part))}</p>
             {a.tests.map((t) => <SandboxResultView key={t.proposal.name} r={t} />)}
             {a.draft && !applied && (
               <button className="primary" style={{ marginTop: 12 }} onClick={async () => { await api('/api/policy/apply', { method: 'POST', body: a.draft }); setApplied(true); }}>
