@@ -93,6 +93,9 @@ export function SandboxResultView({ r, onApply }: { r: SandboxResult; onApply?: 
           <tr><td>Money collected (your {r.affectedBorrowers} loans)</td><td className="num">{birr(r.current.collectedCents)}</td><td className="num">{birr(r.proposed.collectedCents)}</td></tr>
         </tbody>
       </table>
+      {r.deltaCollectedCents === 0 && r.deltaDefaults === 0 && (
+        <p className="small">No difference in simulation: for these borrowers the current rule is not what holds repayment back, so this change would not be worth making.</p>
+      )}
       <p className="small muted">{r.assumptions.join(' ')}</p>
       {onApply && better && <button className="primary" style={{ marginTop: 8 }} onClick={onApply}>Apply to the playbook</button>}
     </div>
@@ -249,7 +252,7 @@ export function Performance() {
           <div className="figures" style={{ marginBottom: 12 }}>
             <div><div className="v">{birr(r.collectedCents)}</div><div className="k">Collected ({r.payments} payments)</div></div>
             <div><div className="v">{r.loansSaved}</div><div className="k">Loans put back on schedule early</div></div>
-            <div><div className="v">{r.promiseKeptRate === null ? '–' : pct(r.promiseKeptRate)}</div><div className="k">Plans kept</div></div>
+            <div><div className="v">{r.promiseKeptRate === null ? '–' : pct(r.promiseKeptRate)}</div><div className="k">Plans kept (all finished plans)</div></div>
             <div><div className="v">{r.handedOver}</div><div className="k">Cases handed to an officer</div></div>
           </div>
           <p>
@@ -390,7 +393,7 @@ export function Setup({ role }: { role: string }) {
                 </tbody>
               </table>
               <p className="muted small" style={{ marginTop: 8 }}>
-                Mapped by {preview.mappedBy === 'gemini' ? 'Gemini' : 'column-name rules'}. {preview.readable} of {preview.sample.length < 5 ? preview.readable + preview.problems.length : 'all'} rows readable.
+                Mapped by {preview.mappedBy === 'gemini' ? 'Gemini' : 'column-name rules'}. {preview.readable} of {preview.readable + preview.problems.length} rows readable.
                 {preview.problems.length > 0 && ` Problems: ${preview.problems.slice(0, 3).map((p) => `row ${p.row}: ${p.reason}`).join('; ')}.`}
               </p>
               <button className="primary" style={{ marginTop: 8 }} onClick={async () => { const r = await api<{ imported: number }>('/api/import/commit', { method: 'POST', body: { csv, mapping: preview.mapping } }); setImported(`Imported ${r.imported} loans.`); }}>Import loans</button>
