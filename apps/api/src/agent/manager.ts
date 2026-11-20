@@ -67,6 +67,8 @@ Be concise: three to five sentences, with the numbers from the tools. Never inve
 All money from the tools is in birr (fields ending in Birr). Write plain sentences: no Markdown, no asterisks. Give loans going bad as percentages. If a test has clearResult false, its difference is simulation noise: say so in plain words (never write field names like clearResult) and do not draft or recommend it; then the honest answer is to keep the current policy and act case by case.`;
 
 
+const pct = (x: number) => Math.round(x * 1000) / 10;
+
 /** The model reads money in birr, never cents: rename every *Cents field to *Birr (whole birr). */
 function inBirr(v: unknown): unknown {
   if (Array.isArray(v)) return v.map(inBirr);
@@ -137,10 +139,9 @@ class Tools {
         });
         return {
           name: proposal.name,
-          collectionRate: { current: result.current.collectionRate, proposed: result.proposed.collectionRate },
-          defaultRate: { current: result.current.defaultRate, proposed: result.proposed.defaultRate },
+          collectedPercent: { current: pct(result.current.collectionRate), proposed: pct(result.proposed.collectionRate) },
+          loansGoingBadPercent: { current: pct(result.current.defaultRate), proposed: pct(result.proposed.defaultRate) },
           extraCollectedBirr: Math.round(result.deltaCollectedCents / 100),
-          changeInLoansGoingBad: result.deltaDefaults,
           clearResult: result.clear,
           affectedBorrowers: result.affectedBorrowers,
           assumptions: result.assumptions,
@@ -241,13 +242,14 @@ async function fallbackPlanner(ctx: Ctx, tools: Tools, question: string): Promis
     { name: `${label}: lower first payment (20%)`, ...scope, minFirstPaymentShare: 0.2 },
     { name: `${label}: remind 7 days ahead`, ...scope, remindDaysBefore: 7 },
   ];
-  const results: Array<{ name: string; extraCollectedBirr: number; changeInLoansGoingBad: number; clearResult: boolean; defaultRate: { current: number; proposed: number } }> = [];
+  const results: Array<{ name: string; extraCollectedBirr: number; clearResult: boolean; loansGoingBadPercent: { current: number; proposed: number } }> = [];
   for (const o of options) results.push((await tools.call('test_policy', o)) as (typeof results)[number]);
-  const best = [...results].sort((a, b) => b.extraCollectedBirr - b.changeInLoansGoingBad * 500 - (a.extraCollectedBirr - a.changeInLoansGoingBad * 500))[0]!;
+  const worse = (r: (typeof results)[number]) => r.loansGoingBadPercent.proposed - r.loansGoingBadPercent.current;
+  const best = [...results].sort((a, b) => b.extraCollectedBirr - worse(b) * 100 - (a.extraCollectedBirr - worse(a) * 100))[0]!;
   const bestOption = options[results.indexOf(best)]!;
-  if (!best.clearResult || (best.extraCollectedBirr <= 0 && best.changeInLoansGoingBad >= 0)) {
+  if (!best.clearResult || (best.extraCollectedBirr <= 0 && worse(best) >= 0)) {
     return `I tested ${options.length} options for ${label.toLowerCase()}; none improved on the current policy in simulation, so I recommend keeping it and following up individually.`;
   }
   await tools.call('draft_policy_change', bestOption);
-  return `I tested ${options.length} options for ${label.toLowerCase()} on a simulated copy of your loan book. The best is "${best.name}": about ${formatBirr(best.extraCollectedBirr * 100)} more collected, with loans going bad at ${Math.round(best.defaultRate.proposed * 100)}% instead of ${Math.round(best.defaultRate.current * 100)}% under today’s policy. I have drafted it for your approval; nothing changes until you approve it.`;
+  return `I tested ${options.length} options for ${label.toLowerCase()} on a simulated copy of your loan book. The best is "${best.name}": about ${formatBirr(best.extraCollectedBirr * 100)} more collected, with loans going bad at ${best.loansGoingBadPercent.proposed}% instead of ${best.loansGoingBadPercent.current}% under today’s policy. I have drafted it for your approval; nothing changes until you approve it.`;
 }

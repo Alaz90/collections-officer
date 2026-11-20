@@ -79,7 +79,7 @@ export function decide(input: DecisionInput): Decision {
   }
   if (risk.level === 'high' && daysUntilDue <= 10) return out('early_checkin', 'high risk before the due date');
   if (risk.level === 'medium' && daysUntilDue <= 7) return out('early_checkin', 'repayment risk is rising');
-  if (daysUntilDue <= playbook.remindDaysBefore) return out('remind', `due in ${daysUntilDue} days`);
+  if (daysUntilDue <= playbook.remindDaysBefore) return out('remind', daysUntilDue <= 0 ? 'due today' : `due in ${daysUntilDue} ${daysUntilDue === 1 ? 'day' : 'days'}`);
 
   return out('wait', 'not due yet');
 }
