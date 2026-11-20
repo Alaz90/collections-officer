@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { CollectionsAgent } from '../src/agent/service.js';
+import { CollectionsAgent, isAffirmative } from '../src/agent/service.js';
 import { OutboxChannel } from '../src/adapters/channels.js';
 import { fixedClock, memoryStore, sequentialIds } from '../src/adapters/memory.js';
 import { FakePayments } from '../src/adapters/payments.js';
@@ -86,6 +86,19 @@ describe('collections agent', () => {
     const payments = await s.deps.store.payments.list('l1');
     expect(payments).toHaveLength(1);
     expect(payments[0]!.amountCents).toBe(60_000);
+  });
+
+  it('a plain "yes" to a counter-offer accepts it', async () => {
+    await s.deps.store.borrowers.put(borrower({ sector: 'trade', region: 'Addis Ababa' }));
+    await s.deps.store.loans.put(loan());
+    await s.agent.handleReply('l1', 'b1', 'I can only pay 200 now');
+    await s.agent.handleReply('l1', 'b1', 'yes');
+    const [plan] = await s.deps.store.plans.list('l1');
+    expect(plan!.status).toBe('active');
+    expect((await s.deps.store.loans.get('loan1'))!.status).not.toBe('handed_over');
+    expect(isAffirmative('Ok, deal!')).toBe(true);
+    expect(isAffirmative('እሺ')).toBe(true);
+    expect(isAffirmative('yes but only next month')).toBe(false);
   });
 
   it('hands over a borrower in hardship instead of negotiating', async () => {

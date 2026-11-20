@@ -47,6 +47,12 @@ class Trace {
 /** Outgoing messages that close a step rather than ask a question: silence after them is not a warning sign. */
 const NO_REPLY_EXPECTED = new Set(['thanks', 'plan_confirmation', 'handover_notice']);
 
+/** A short agreement such as "yes", "ok, deal" or "እሺ". */
+export function isAffirmative(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[.!,]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^(yes|yeah|yep|ok|okay|sure|agree|agreed|deal|fine|accept|accepted|confirm|confirmed|እሺ|አዎ|አዎን|ይሁን)( (yes|ok|okay|deal|thanks|thank you|please|i agree|agreed|እሺ|አመሰግናለሁ))*$/.test(t);
+}
+
 export class CollectionsAgent {
   weights: RiskWeights = DEFAULT_WEIGHTS;
 
@@ -420,7 +426,15 @@ export class CollectionsAgent {
 
     const ctx = await this.context(lenderId, loan, borrower);
     const due = planTarget(loan, today);
-    const reading = await this.deps.ai.readReply(text, { today, amountDue: formatBirr(due.cents), caseSummary: borrower.caseSummary });
+    const openOffer = ctx.offeredPlan
+      ? `\nOpen offer from the lender: ${ctx.offeredPlan.instalments.map((i) => `${formatBirr(i.amountCents)} on ${i.dueDate}`).join(', ')}. A reply agreeing to it means will_pay_in_full.`
+      : '';
+    const reading = await this.deps.ai.readReply(text, { today, amountDue: formatBirr(due.cents), caseSummary: borrower.caseSummary + openOffer });
+    // A plain "yes" to an open offer is an acceptance, whatever the model made of it.
+    if (ctx.offeredPlan && isAffirmative(text) && reading.intent !== 'will_pay_in_full') {
+      trace.observe(`short agreement to the open offer: "${text.trim()}"`);
+      reading.intent = 'will_pay_in_full';
+    }
     trace.tool('read_reply', reading);
     const summary = `${borrower.caseSummary}\n${today}: ${reading.summary}`.trim().split('\n').slice(-8).join('\n');
     // Remember when the borrower expects income, for future schedule changes.
