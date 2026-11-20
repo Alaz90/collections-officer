@@ -62,9 +62,9 @@ const TOOLS: FunctionDeclaration[] = [
 ];
 
 const SYSTEM = `You advise the manager of a small lender on collections. Use the tools to look at the loan book and to test options before recommending anything.
-For a question about a group of borrowers: find the affected loans, test two or three policies with test_policy, compare their effect on money collected and loans going bad, then draft the best one with draft_policy_change.
+For a question about a group of borrowers: find the affected loans, test one or two policies with test_policy, compare their effect on money collected and loans going bad, then draft the best one with draft_policy_change.
 Be concise: three to five sentences, with the numbers from the tools. Never invent numbers. Say that the manager must approve any change.
-All money from the tools is in birr (fields ending in Birr). Write plain sentences: no Markdown, no asterisks. Give loans going bad as percentages. If a test has clearResult false, its difference is simulation noise: say so and do not recommend it.`;
+All money from the tools is in birr (fields ending in Birr). Write plain sentences: no Markdown, no asterisks. Give loans going bad as percentages. If a test has clearResult false, its difference is simulation noise: say so in plain words (never write field names like clearResult) and do not draft or recommend it; then the honest answer is to keep the current policy and act case by case.`;
 
 
 /** The model reads money in birr, never cents: rename every *Cents field to *Birr (whole birr). */
@@ -127,7 +127,7 @@ class Tools {
       }
       case 'test_policy': {
         // Each test is a full simulation; three per question keeps an answer inside a free server's CPU and memory.
-        if (this.tests.length >= 3) return { error: 'limit of 3 policy tests per question reached; recommend from the tests already run' };
+        if (this.tests.length >= 2) return { error: 'limit of 2 policy tests per question reached; recommend from the tests already run' };
         const proposal = toProposal(args);
         const result = await this.runTest(proposal);
         this.steps.push({
@@ -147,7 +147,15 @@ class Tools {
         };
       }
       case 'draft_policy_change': {
-        this.draft = toProposal(args);
+        // Only a policy that was tested, with a clear improvement, can be put in front of the manager.
+        const wanted = toProposal(args);
+        const tested = this.tests.find(
+          (t) => t.clear && (t.deltaCollectedCents > 0 || t.deltaDefaults < 0) && JSON.stringify({ s: t.proposal.segment ?? {}, p: t.proposal.playbook }) === JSON.stringify({ s: wanted.segment ?? {}, p: wanted.playbook }),
+        );
+        if (!tested) {
+          return { error: 'not drafted: only a policy that was tested with test_policy, with the same settings, and showed a clear improvement (clearResult true) can be drafted. Tell the manager no change is recommended on this evidence.' };
+        }
+        this.draft = tested.proposal;
         this.steps.push({ tool: name, input: args, summary: `drafted "${this.draft.name}" for approval` });
         return { drafted: true, needsManagerApproval: true };
       }
@@ -160,7 +168,8 @@ class Tools {
     const lender = await lenderOf(this.ctx);
     const cases = await this.ctx.agent.preview(this.ctx.lenderId);
     const signals = cases.map((c) => c.region).filter((r): r is NonNullable<typeof r> => !!r);
-    const result = await runSandbox({ lender, cases, signals, proposal, today: this.ctx.today, seeds: 4 });
+    // Three runs per test keeps an answer to about a minute on a free server; all three must agree for a clear result.
+    const result = await runSandbox({ lender, cases, signals, proposal, today: this.ctx.today, seeds: 3 });
     this.tests.push(result);
     return result;
   }
