@@ -22,6 +22,16 @@ class FirestoreCollection<T extends { id: string }> implements Collection<T> {
     await this.db.collection(this.name).doc(id).delete();
   }
 
+  async clear(lenderId: string) {
+    // Batched deletes: one round trip per 400 documents instead of one per document.
+    const refs = (await this.db.collection(this.name).where('lenderId', '==', lenderId).select().get()).docs.map((d) => d.ref);
+    for (let i = 0; i < refs.length; i += 400) {
+      const batch = this.db.batch();
+      for (const ref of refs.slice(i, i + 400)) batch.delete(ref);
+      await batch.commit();
+    }
+  }
+
   async list(lenderId: string) {
     const snap =
       this.name === 'lenders'

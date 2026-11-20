@@ -25,6 +25,10 @@ class MemoryCollection<T extends { id: string; lenderId?: string }> implements C
     this.items.delete(id);
   }
 
+  async clear(lenderId: string) {
+    for (const [id, item] of this.items) if ((item as { lenderId?: string }).lenderId === lenderId) this.items.delete(id);
+  }
+
   async list(lenderId: string) {
     const out: T[] = [];
     for (const i of this.items.values()) if (!i.lenderId || i.lenderId === lenderId) out.push(this.c(i));

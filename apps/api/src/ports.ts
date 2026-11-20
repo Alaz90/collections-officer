@@ -38,6 +38,8 @@ export interface Collection<T extends { id: string }> {
   put(item: T): Promise<void>;
   list(lenderId: string): Promise<T[]>;
   remove(id: string): Promise<void>;
+  /** Deletes every item of this lender (demo reset). */
+  clear(lenderId: string): Promise<void>;
 }
 
 export interface Store {

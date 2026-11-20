@@ -354,8 +354,7 @@ export function createServer(config: Config, built = buildDeps(config)) {
       // Back to the fresh demo book, for recording a demo. Telegram links are kept so phones stay connected.
       const links = new Map((await deps.store.borrowers.list(lenderId)).filter((b) => b.telegramChatId).map((b) => [b.id, b.telegramChatId!]));
       for (const name of ['borrowers', 'loans', 'payments', 'plans', 'messages', 'runs', 'signals'] as const) {
-        const col = deps.store[name] as Collection<{ id: string }>;
-        for (const item of await col.list(lenderId)) await col.remove(item.id);
+        await (deps.store[name] as Collection<{ id: string }>).clear(lenderId);
       }
       await seedDemo(deps.store, lenderId, today());
       for (const [id, chat] of links) {
